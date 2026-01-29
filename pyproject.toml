@@ -24,3 +24,8 @@ packages = [{include = "langgraph_projects", from = "src"}]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "langgraph-cli[inmem] (>=0.4.12,<0.5.0)"
+]
