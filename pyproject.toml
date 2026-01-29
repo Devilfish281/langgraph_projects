@@ -1,0 +1,26 @@
+[project]
+name = "langgraph-projects"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Devilfish281",email = "Dobley@csu.fullerton.edu"}
+]
+readme = "README.md"
+requires-python = ">=3.12,<4.0.0"
+dependencies = [
+    "python-dotenv (>=1.2.1,<2.0.0)",
+    "langgraph (>=1.0.7,<2.0.0)",
+    "langchain-openai (>=1.1.7,<2.0.0)",
+    "langchain-tavily (>=0.2.17,<0.3.0)",
+    "langchain-core (>=1.2.7,<2.0.0)",
+    "langsmith (>=0.6.4,<0.7.0)",
+    "wikipedia (>=1.4.0,<2.0.0)",
+    "pillow (>=12.1.0,<13.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "langgraph_projects", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
