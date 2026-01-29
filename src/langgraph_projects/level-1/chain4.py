@@ -304,6 +304,16 @@ def test_messages():
 
 def test_tool_calling():
     """
+    This only showing that the LLM can:
+
+    see that a tool exists (multiply(a:int, b:int))
+
+    decide “I should use that tool”
+
+    return a message that contains a tool call request (name + arguments)
+    """
+
+    """
     ## Tools
 
     Tools are useful whenever you want a model to interact with external systems.
@@ -479,38 +489,6 @@ def build_app():
 
     graph = builder.compile()  # (unchanged)
 
-    #######################################################
-    ## Display the graph for Analysts
-    #######################################################
-    # Define the directory containing the text files and the persistent directory
-    view_graph = env_bool(
-        "VIEW_GRAPH", default=False
-    )  # Set to True to view the graph image
-    if view_graph:
-        current_dir = Path(__file__).parent
-
-        images_directory = current_dir / "images"
-
-        if not images_directory.exists():
-            print("images directory does not exist. Creating the directory images.")
-            print(f"images_directory: {images_directory}")
-
-            images_directory.mkdir(parents=True, exist_ok=True)
-
-        print("Display the graph image.")
-        # Generate the graph image as bytes
-        graph_image_bytes = graph.get_graph(xray=1).draw_mermaid_png()
-
-        # Define the output file path
-        output_file_path = images_directory / "analysts_graph_image.png"
-
-        # Save the image bytes to a file
-        with open(output_file_path, "wb") as f:
-            f.write(graph_image_bytes)
-
-        # Open the image using the default viewer
-        Image.open(output_file_path).show()
-
     return graph
 
 
@@ -531,7 +509,7 @@ if __name__ == "__main__":
         default_open=True,
         xray=1,
         images_dir_name="images",
-        output_name="agent6_graph_image.png",
+        output_name="chain4_graph_image.png",
     )
 
     #######################################################
@@ -543,18 +521,22 @@ if __name__ == "__main__":
     # ------------------------------------------------------------
     # Run graph: no tool call
     # ------------------------------------------------------------
+    logger.debug("Invoking model...")
     messages = graph.invoke(
         {"messages": [HumanMessage(content="Hello!")]}
     )  #  always pass a list
+    logger.debug("Model returned.")
     for m in messages["messages"]:
         m.pretty_print()
 
     # ------------------------------------------------------------
     # Run graph: SHOULD call multiply (ToolNode executes it)
     # ------------------------------------------------------------
+    logger.debug("Invoking model...")
     messages = graph.invoke(
         {"messages": [HumanMessage(content="Multiply 2 and 3")]}
     )  #  always pass a list
+    logger.debug("Model returned.")
     for m in messages["messages"]:
         m.pretty_print()
 
