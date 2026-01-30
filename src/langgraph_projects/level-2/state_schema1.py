@@ -514,9 +514,9 @@ if __name__ == "__main__":
 
     logger.info(
         "Final state: name=%s | mood=%s | random_value=%s",
-        final_state.name,
-        final_state.mood,
-        final_state.random_value,
+        final_state.get("name"),
+        final_state.get("mood"),
+        final_state.get("random_value"),
     )
 
     """
