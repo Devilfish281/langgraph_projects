@@ -27,7 +27,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.messages import (
     AIMessage,
@@ -244,7 +244,7 @@ def display_graph_if_enabled(
     """
 
 
-from typing_extensions import TypedDict
+# from typing_extensions import TypedDict
 
 
 class State(TypedDict):
