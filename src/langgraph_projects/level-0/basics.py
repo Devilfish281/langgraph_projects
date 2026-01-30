@@ -1,4 +1,4 @@
-# langchain_academy/basics/basics.py
+# langgraph_projects/basics/basics.py
 ###########################################################
 ## Supporting Code
 ###########################################################

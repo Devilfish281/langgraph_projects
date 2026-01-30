@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Langchain-acadeemy/src/langchain_academy/level-1/agent6.py
+# langgraph_projects/src/langgraph_projects/level-1/agent6.py
 """
 ## Goals
 
@@ -20,6 +20,21 @@ This is the intuition behind [ReAct](https://react-lm.github.io/), a general age
 This [general purpose architecture](https://blog.langchain.com/planning-for-agents/) can be applied to many types of tools.
 """
 
+"""
+
+
+###  ReAct: A General Agent Architecture
+
+This is the core intuition behind ReAct, a foundational architecture for intelligent agents. It operates on a simple yet powerful loop:
+
+* `act` — Allow the model to invoke specific tools.
+* `observe` — Capture and return the tool's output back to the model.
+* `reason` — Let the model analyze the result and decide what to do next
+  (e.g., invoke another tool or generate a direct response).
+---
+
+This general-purpose architecture supports a wide range of tool-use scenarios, enabling dynamic reasoning and tool orchestration.
+"""
 
 # %pip install --quiet -U langchain_openai langchain_core langgraph langgraph-prebuilt
 
@@ -30,12 +45,22 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_openai import ChatOpenAI
+from langchain_tavily import TavilySearch
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from PIL import Image
+from typing_extensions import TypedDict
 
 from langgraph_projects.my_utils.load_env import load_dotenv_only, validate_environment
 from langgraph_projects.my_utils.logger_setup import setup_logger
@@ -49,6 +74,8 @@ _RUNTIME_INITIALIZED = False
 
 _INIT_LOCK = threading.Lock()
 _MODEL_LOCK = threading.Lock()
+
+LANGCHAIN_PROJECT_NAME = "Agent Project"
 
 
 #####################################################################
@@ -82,12 +109,16 @@ def init_runtime() -> None:
         if _RUNTIME_INITIALIZED:
             return
 
-        load_dotenv_only()
-        logger = setup_logger()
-        validate_environment(log=logger)
+        load_dotenv_only()  # Changed Code
+        logger = setup_logger()  # Changed Code
+        validate_environment(log=logger)  # Added Code:
         logger.debug("my_langchain_logger Started!")
-        logger.debug(f"Effective LOG_LEVEL from env: {os.getenv('LOG_LEVEL')}")
-        logger.debug(f"Logger effective level: {logger.getEffectiveLevel()}")
+        logger.debug(
+            f"Effective LOG_LEVEL from env: {os.getenv('LOG_LEVEL')}"
+        )  # Added Code:
+        logger.debug(
+            f"Logger effective level: {logger.getEffectiveLevel()}"
+        )  # Added Code:
 
         _RUNTIME_INITIALIZED = True
 
@@ -105,7 +136,8 @@ def init_runtime() -> None:
 # is more deterministic and focused outputs. This is good for tasks requiring accuracy or factual responses.
 # High temperature (close to 1) is good for creative tasks or generating varied responses.
 def get_model() -> ChatOpenAI:
-    """Create the LLM client lazily and return a cached instance.
+    """
+    Create the LLM client lazily and return a cached instance.
 
     The model is created only once per process (thread-safe) to prevent repeated initialization
     and to avoid import-time side effects.
@@ -135,7 +167,8 @@ from langsmith import utils
 
 
 def init_langsmith() -> None:
-    """Initialize LangSmith/LangChain tracing configuration (optional).
+    """
+    Initialize LangSmith/LangChain tracing configuration (optional).
 
     This is gated by the ``LANGSMITH_ENABLED`` environment variable.
 
@@ -169,7 +202,8 @@ def init_langsmith() -> None:
         # execution will be associated with the "Router Agent Project".
         # This categorization aids in the systematic analysis and retrieval of trace data.
         # If the specified project does not exist, it will be created automatically upon the first trace.
-        os.environ["LANGCHAIN_PROJECT"] = "Router Agent Project"
+
+        os.environ["LANGCHAIN_PROJECT"] = LANGCHAIN_PROJECT_NAME
 
     # Check if tracing is enabled in the current environment
     # This function evaluates the current tracing status, which is determined by
@@ -218,6 +252,16 @@ def display_graph_if_enabled(
             logger.exception("Saved graph PNG but failed to open viewer.")
 
 
+def make_state_type():
+    class CustomMessagesState(MessagesState):
+        # Add any keys needed beyond messages, which is pre-built
+        pass
+
+    return CustomMessagesState
+
+
+# CustomMessagesState = make_state_type()
+# builder = StateGraph(CustomMessagesState)
 #####################################################################
 ### END
 #####################################################################
@@ -274,8 +318,6 @@ def build_app():
 
     """Let's create our LLM and prompt it with the overall desired agent behavior."""
 
-    from langchain_core.messages import HumanMessage, SystemMessage
-
     # System message
     sys_msg = SystemMessage(
         content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
@@ -283,6 +325,7 @@ def build_app():
 
     # Node
     def assistant_node(state: MessagesState):
+        logger.debug("Invoking LLM with tool calling capabilities...")
         return {"messages": [llm_with_tools.invoke([sys_msg] + state["messages"])]}
 
     """
@@ -305,9 +348,6 @@ def build_app():
     * If the model response is not a tool call, the flow is directed to END, terminating the process.
     """
 
-    from langgraph.graph import START, StateGraph
-    from langgraph.prebuilt import ToolNode, tools_condition
-
     # Graph
     builder = StateGraph(MessagesState)
 
@@ -323,13 +363,14 @@ def build_app():
         # If the latest message (result) from assistant is a not a tool call -> tools_condition routes to END
         tools_condition,
     )
+    # (NEW) Loop back from tools to assistant
     builder.add_edge("tools", "assistant")
     graph = builder.compile()
 
     return graph
 
 
-from langchain_core.messages import HumanMessage
+# from langchain_core.messages import HumanMessage
 
 graph = build_app()
 
@@ -366,9 +407,11 @@ if __name__ == "__main__":
     for m in messages["messages"]:
         m.pretty_print()
 
-    """## LangSmith
+    """
+    LangSmith
 
     We can look at traces in LangSmith.
+    https://smith.langchain.com/
     """
 
     print("Program Done.")

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Langchain-acadeemy/src/langchain_academy/level-1/chain4.py
+# langgraph_projects/src/langgraph_projects/level-1/chain4.py
 
 
 # import threading
@@ -38,12 +38,22 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_openai import ChatOpenAI
+from langchain_tavily import TavilySearch
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from PIL import Image
+from typing_extensions import TypedDict
 
 from langgraph_projects.my_utils.load_env import load_dotenv_only, validate_environment
 from langgraph_projects.my_utils.logger_setup import setup_logger
@@ -232,6 +242,16 @@ def display_graph_if_enabled(
             logger.exception("Saved graph PNG but failed to open viewer.")
 
 
+def make_state_type():
+    class CustomMessagesState(MessagesState):
+        # Add any keys needed beyond messages, which is pre-built
+        pass
+
+    return CustomMessagesState
+
+
+# CustomMessagesState = make_state_type()
+# builder = StateGraph(CustomMessagesState)
 #####################################################################
 ### END
 #####################################################################
@@ -250,9 +270,6 @@ def multiply(a: int, b: int) -> int:
     value = a * b
     logger.info(f"Tool `multiply` called with a={a}, b={b}, result={value}")
     return value
-
-
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 
 
 def test_messages():
@@ -360,13 +377,6 @@ def test_tool_calling():
     logger.info(f"Tool calls requested by model: {tool_call_msg.tool_calls}")
 
 
-from typing import Annotated
-
-from langchain_core.messages import AnyMessage
-from langgraph.graph.message import add_messages
-from typing_extensions import TypedDict
-
-
 def test_messages_list():
     """
     ## Using messages as state
@@ -457,9 +467,12 @@ def build_app():
 
     llm_with_tools = get_model().bind_tools([multiply])
 
+    CustomMessagesState = make_state_type()
+    # builder = StateGraph(CustomMessagesState)
+
     # Node: call the tool-enabled model
-    def tool_calling_llm_node(state: MessagesState):
-        return {"messages": [llm_with_tools.invoke(state["messages"])]}
+    def tool_calling_llm_node(CustomMessagesState: MessagesState):
+        return {"messages": [llm_with_tools.invoke(CustomMessagesState["messages"])]}
 
     # tool execution node (this is what actually calls multiply)
     tool_node = ToolNode([multiply])
@@ -467,9 +480,9 @@ def build_app():
     #  router decides whether to execute tools or stop
     # END is  "__end__"
     def should_continue(
-        state: MessagesState,
+        CustomMessagesState: MessagesState,
     ) -> Literal["tool_node", "__end__"]:
-        last_message = state["messages"][-1]
+        last_message = CustomMessagesState["messages"][-1]
         if getattr(last_message, "tool_calls", None):
             return "tool_node"
         return END

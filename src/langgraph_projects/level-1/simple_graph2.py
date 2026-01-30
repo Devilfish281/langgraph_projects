@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Langchain-acadeemy/src/langchain_academy/level-1/simple_graph2.py
+# langgraph_projects/src/langgraph_projects/level-1/simple_graph2.py
 # import logging
 # import os
 # import threading
@@ -25,15 +25,24 @@
 ###########################################################
 import logging
 import os
-import random
 import threading
 from pathlib import Path
-from typing import Literal, NotRequired
+from typing import Annotated, Literal
 
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_openai import ChatOpenAI
+from langchain_tavily import TavilySearch
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from PIL import Image
+from typing_extensions import TypedDict
 
 from langgraph_projects.my_utils.load_env import load_dotenv_only, validate_environment
 from langgraph_projects.my_utils.logger_setup import setup_logger
@@ -221,10 +230,26 @@ def display_graph_if_enabled(
         except Exception:
             logger.exception("Saved graph PNG but failed to open viewer.")
 
+    #####################################################################
+    ### END
+    #####################################################################
+    """
+    ## State
 
-#####################################################################
-### END
-#####################################################################
+    First, define the [State](https://docs.langchain.com/oss/python/langgraph/graph-api#state) of the graph.
+
+    The State schema serves as the input schema for all Nodes and Edges in the graph.
+
+    Let's use the `TypedDict` class from python's `typing` module as our schema, which provides type hints for the keys.
+    """
+
+
+from typing_extensions import TypedDict
+
+
+class State(TypedDict):
+    graph_state: str
+    random_value: NotRequired[float]
 
 
 """## Nodes
@@ -294,22 +319,6 @@ def decide_mood(state) -> Literal["node_2", "node_3"]:
 def build_app():
     init_runtime()
     init_langsmith()
-
-    """
-    ## State
-
-    First, define the [State](https://docs.langchain.com/oss/python/langgraph/graph-api#state) of the graph.
-
-    The State schema serves as the input schema for all Nodes and Edges in the graph.
-
-    Let's use the `TypedDict` class from python's `typing` module as our schema, which provides type hints for the keys.
-    """
-
-    from typing_extensions import TypedDict
-
-    class State(TypedDict):
-        graph_state: str
-        random_value: NotRequired[float]
 
     """
     ## Graph Construction
@@ -409,6 +418,26 @@ if __name__ == "__main__":
     ```
     """
 
+    logger.info(
+        "Final state: graph_state=%s | random_value=%s",
+        final_state.get("graph_state"),
+        final_state.get("random_value"),
+    )
+
+    # try running multiple times to see different paths
+    logger.debug("Invoking model...")
+    final_state = graph.invoke({"graph_state": "Hi, this is Lance."})
+    logger.debug("Model returned.")
+    logger.info(
+        "Final state: graph_state=%s | random_value=%s",
+        final_state.get("graph_state"),
+        final_state.get("random_value"),
+    )
+
+    # try running multiple times to see different paths
+    logger.debug("Invoking model...")
+    final_state = graph.invoke({"graph_state": "Hi, this is Lance."})
+    logger.debug("Model returned.")
     logger.info(
         "Final state: graph_state=%s | random_value=%s",
         final_state.get("graph_state"),

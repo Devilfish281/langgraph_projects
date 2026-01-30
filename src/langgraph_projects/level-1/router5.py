@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Langchain-acadeemy/src/langchain_academy/level-1/router5.py
+# langgraph_projects/src/langgraph_projects/level-1/router5.py
 """
 
 ## Goals
@@ -23,21 +23,6 @@ For this, we can use two ideas:
 # %pip install --quiet -U langchain_openai langchain_core langgraph langgraph-prebuilt
 
 
-import os
-
-
-def multiply(a: int, b: int) -> int:
-    """Multiply a and b.
-
-    Args:
-        a: first int
-        b: second int
-    """
-    value = a * b
-    logger.debug(f"Tool `multiply` called with a={a}, b={b}, result={value}")
-    return value
-
-
 ###########################################################
 ## Supporting Code
 ###########################################################
@@ -45,15 +30,25 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_openai import ChatOpenAI
+from langchain_tavily import TavilySearch
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from PIL import Image
+from typing_extensions import TypedDict
 
-from langchain_academy.my_utils.load_env import load_dotenv_only, validate_environment
-from langchain_academy.my_utils.logger_setup import setup_logger
+from langgraph_projects.my_utils.load_env import load_dotenv_only, validate_environment
+from langgraph_projects.my_utils.logger_setup import setup_logger
 
 logger = logging.getLogger(__name__)  # Reuse the global logger
 _MODEL = None
@@ -124,7 +119,8 @@ def init_runtime() -> None:
 # is more deterministic and focused outputs. This is good for tasks requiring accuracy or factual responses.
 # High temperature (close to 1) is good for creative tasks or generating varied responses.
 def get_model() -> ChatOpenAI:
-    """Create the LLM client lazily and return a cached instance.
+    """
+    Create the LLM client lazily and return a cached instance.
 
     The model is created only once per process (thread-safe) to prevent repeated initialization
     and to avoid import-time side effects.
@@ -154,7 +150,8 @@ from langsmith import utils
 
 
 def init_langsmith() -> None:
-    """Initialize LangSmith/LangChain tracing configuration (optional).
+    """
+    Initialize LangSmith/LangChain tracing configuration (optional).
 
     This is gated by the ``LANGSMITH_ENABLED`` environment variable.
 
@@ -237,9 +234,29 @@ def display_graph_if_enabled(
             logger.exception("Saved graph PNG but failed to open viewer.")
 
 
+def make_state_type():
+    class CustomMessagesState(MessagesState):
+        # Add any keys needed beyond messages, which is pre-built
+        pass
+
+    return CustomMessagesState
+
+
+# CustomMessagesState = make_state_type()
+# builder = StateGraph(CustomMessagesState)
 #####################################################################
 ### END
 #####################################################################
+def multiply(a: int, b: int) -> int:
+    """Multiply a and b.
+
+    Args:
+        a: first int
+        b: second int
+    """
+    value = a * b
+    logger.debug(f"Tool `multiply` called with a={a}, b={b}, result={value}")
+    return value
 
 
 def build_app():
@@ -260,6 +277,7 @@ def build_app():
 
     # Node
     def tool_calling_llm(state: MessagesState):
+        logger.debug("Invoking LLM with tool calling capabilities...")
         return {"messages": [llm_with_tools.invoke(state["messages"])]}
 
     # Build graph
@@ -301,10 +319,21 @@ if __name__ == "__main__":
     )
 
     #######################################################
+    messages = [HumanMessage(content="Hello World! What is the capital of France?")]
 
-    messages = [HumanMessage(content="Hello, what is 2 multiplied by 2?")]
+    logger.debug("Invoking model...")
     messages = graph.invoke({"messages": messages})
+    logger.debug("Model returned.")
+
     for m in messages["messages"]:
         m.pretty_print()
+    #######################################################
+    messages = [HumanMessage(content="Hello, what is 2 multiplied by 2?")]
 
+    logger.debug("Invoking model...")
+    messages = graph.invoke({"messages": messages})
+    logger.debug("Model returned.")
+
+    for m in messages["messages"]:
+        m.pretty_print()
     print("Program Done.")
