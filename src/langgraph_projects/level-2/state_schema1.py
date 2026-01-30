@@ -334,6 +334,9 @@ def decide_mood(state) -> Literal["node_2", "node_3"]:
 def decide_mood_new(state) -> Literal["node_2", "node_3"]:
 
     # Here, let's just do a 50 / 50 split between nodes 2, 3
+    if state.random_value is None:  # Added Code
+        return "node_3"  # Added Code (or pick whichever default you prefer)
+
     # if random.random() < 0.5:
     if state.random_value < 0.5:
         # 50% of the time, we return Node 2
@@ -399,11 +402,10 @@ def build_dataclasses_app():
 from pydantic import BaseModel, ValidationError, field_validator
 
 
-# If you don’t even want callers to be able to provide it during initialization,
 class PydanticState(BaseModel):
     name: str
     mood: str  # "happy" or "sad"
-    random_value: float = field(init=False)  # not accepted in __init__
+    random_value: float | None = None  #  now optional
 
     @field_validator("mood")
     @classmethod
@@ -412,9 +414,6 @@ class PydanticState(BaseModel):
         if value not in ["happy", "sad"]:
             raise ValueError("Each mood must be either 'happy' or 'sad'")
         return value
-
-
-PydanticState
 
 
 def build_pydantic_state_app():
@@ -572,9 +571,9 @@ if __name__ == "__main__":
 
     logger.info(
         "Final state: name=%s | mood=%s | random_value=%s",
-        final_state.name,
-        final_state.mood,
-        final_state.random_value,
+        final_state.get("name"),
+        final_state.get("mood"),
+        final_state.get("random_value"),
     )
 
     print("Program Done.")
