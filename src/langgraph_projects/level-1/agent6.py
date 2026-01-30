@@ -1,4 +1,28 @@
-# langchain_academy/basics/basics.py
+# -*- coding: utf-8 -*-
+# Langchain-acadeemy/src/langchain_academy/level-1/agent6.py
+"""
+## Goals
+
+Now, we can extend this into a generic agent architecture.
+
+In the above router, we invoked the model and, if it chose to call a tool, we returned a `ToolMessage` to the user.
+
+But, what if we simply pass that `ToolMessage` *back to the model*?
+
+We can let it either (1) call another tool or (2) respond directly.
+
+This is the intuition behind [ReAct](https://react-lm.github.io/), a general agent architecture.
+
+* `act` - let the model call specific tools
+* `observe` - pass the tool output back to the model
+* `reason` - let the model reason about the tool output to decide what to do next (e.g., call another tool or just respond directly)
+
+This [general purpose architecture](https://blog.langchain.com/planning-for-agents/) can be applied to many types of tools.
+"""
+
+
+# %pip install --quiet -U langchain_openai langchain_core langgraph langgraph-prebuilt
+
 ###########################################################
 ## Supporting Code
 ###########################################################
@@ -9,7 +33,6 @@ from pathlib import Path
 from typing import Literal
 
 from langchain_openai import ChatOpenAI
-from langchain_tavily import TavilySearch
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from PIL import Image
@@ -199,77 +222,153 @@ def display_graph_if_enabled(
 ### END
 #####################################################################
 
-from langchain_core.messages import HumanMessage
+
+# This will be a tool
+def multiply(a: int, b: int) -> int:
+    """Multiply a and b.
+
+    Args:
+        a: first int
+        b: second int
+    """
+    value = a * b
+    logger.info(f"Tool `multiply` called with a={a}, b={b}, result={value}")
+    return value
+
+
+# This will be a tool
+def add(a: int, b: int) -> int:
+    """Adds a and b.
+
+    Args:
+        a: first int
+        b: second int
+    """
+    value = a + b
+    logger.info(f"Tool `add` called with a={a}, b={b}, result={value}")
+    return value
+
+
+def divide(a: int, b: int) -> float:
+    """Divide a and b.
+
+    Args:
+        a: first int
+        b: second int
+    """
+    value = a / b
+    logger.info(f"Tool `divide` called with a={a}, b={b}, result={value}")
+    return value
 
 
 def build_app():
-    """Build and compile the LangGraph agent executor application.
-
-    The graph follows a simple loop:
-
-    1. ``llm_call``: The model decides whether to answer directly or emit tool calls.
-    2. Conditional routing:
-       - If tool calls exist, route to ``tool_node``.
-       - Otherwise, route to ``__end__``.
-    3. ``tool_node``: Executes tools and returns results to the message state.
-    4. Loop back to ``llm_call``.
-
-    Tools
-    -----
-    - :class:`langchain_tavily.TavilySearch` (requires ``TAVILY_API_KEY``)
-
-    :returns: A compiled LangGraph application (executable graph).
-    :rtype: typing.Any
-    """
     init_runtime()
     init_langsmith()
 
-    # Create a message
-    msg = HumanMessage(content="Hello world", name="Lance")
+    tools = [add, multiply, divide]
 
-    # Message list
-    messages = [msg]
+    # For this ipynb we set parallel tool calling to false as math generally is done sequentially, and this time we have 3 tools that can do math
+    # the OpenAI model specifically defaults to parallel tool calling for efficiency, see https://python.langchain.com/docs/how_to/tool_calling_parallel/
+    # play around with it and see how the model behaves with math equations!
+    llm_with_tools = get_model().bind_tools(tools, parallel_tool_calls=False)
 
-    # Chat models in LangChain have a number of [default methods](https://reference.langchain.com/python/langchain_core/runnables).
-    # For the most part, we'll be using:
-    # * [stream](https://docs.langchain.com/oss/python/langchain/models#stream): stream back chunks of the response
-    # * [invoke](https://docs.langchain.com/oss/python/langchain/models#invoke): call the chain on an input
+    """Let's create our LLM and prompt it with the overall desired agent behavior."""
 
-    # And, as mentioned, chat models take [messages](https://docs.langchain.com/oss/python/langchain/messages) as input.
-    # Messages have a role (that describes who is saying the message) and a content property.
-    # We'll be talking a lot more about this later, but here let's just show the basics.
+    from langchain_core.messages import HumanMessage, SystemMessage
 
-    # Invoke the model with a list of messages
-    logger.info("Invoking model...")
-    result = get_model().invoke(messages)
-    logger.info("Model returned.")
-    logger.info(f"Model invocation result: {result}")
+    # System message
+    sys_msg = SystemMessage(
+        content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
+    )
 
-    # We get an `AIMessage` response. Also, note that we can just invoke a chat model with a string.
-    # When a string is passed in as input, it is converted to a `HumanMessage` and then passed to the underlying model.
-    logger.info("Invoking model...")
-    result = get_model().invoke("hello world")
-    logger.info("Model returned.")
-    logger.info(f"Model invocation result: {result}")
+    # Node
+    def assistant_node(state: MessagesState):
+        return {"messages": [llm_with_tools.invoke([sys_msg] + state["messages"])]}
 
-    # Search Tools
+    """
+    As before, we use `MessagesState` and define a `Tools` node with our list of tools.
 
-    # You'll also see [Tavily](https://tavily.com/) in the README, which is a search engine optimized for LLMs and RAG, aimed at efficient,
-    # quick, and persistent search results. As mentioned, it's easy to sign up and offers a generous free tier.
-    # Some lessons (in Module 4) will use Tavily by default but, of course,
-    # other search tools can be used if you want to modify the code for yourself.
-    tavily_search = TavilySearch(max_results=3)
+    The `Assistant` node is just our model with bound tools.
 
-    data = tavily_search.invoke({"query": "What is LangGraph?"})
-    search_docs = data.get("results", data)
-    logger.info(f"Tavily Search returned {len(search_docs)} results.")
-    for i, doc in enumerate(search_docs, start=1):
-        logger.info(f"Result {i}: {doc}")
+    We create a graph with `Assistant` and `Tools` nodes.
 
-    print("app Done.")
+    We add `tools_condition` edge, which routes to `End` or to `Tools` based on  whether the `Assistant` calls a tool.
 
+    Now, we add one new step:
+
+    We connect the `Tools` node *back* to the `Assistant`, forming a loop.
+
+    * After the `assistant` node executes, `tools_condition` checks if the model's output is a tool call.
+    * If it is a tool call, the flow is directed to the `tools` node.
+    * The `tools` node connects back to `assistant`.
+    * This loop continues as long as the model decides to call tools.
+    * If the model response is not a tool call, the flow is directed to END, terminating the process.
+    """
+
+    from langgraph.graph import START, StateGraph
+    from langgraph.prebuilt import ToolNode, tools_condition
+
+    # Graph
+    builder = StateGraph(MessagesState)
+
+    # Define nodes: these do the work
+    builder.add_node("assistant", assistant_node)
+    builder.add_node("tools", ToolNode(tools))
+
+    # Define edges: these determine how the control flow moves
+    builder.add_edge(START, "assistant")
+    builder.add_conditional_edges(
+        "assistant",
+        # If the latest message (result) from assistant is a tool call -> tools_condition routes to tools
+        # If the latest message (result) from assistant is a not a tool call -> tools_condition routes to END
+        tools_condition,
+    )
+    builder.add_edge("tools", "assistant")
+    graph = builder.compile()
+
+    return graph
+
+
+from langchain_core.messages import HumanMessage
+
+graph = build_app()
+
+# Only run demos when you execute the file directly (NOT when Studio imports it).
 
 if __name__ == "__main__":
     # Demo / manual run (kept under __main__ so imports remain side-effect-light).
-    app = build_app()
+    #######################################################
+    ## Display the graph for Analysts
+    #######################################################
+    # display_graph_if_enabled(graph)
+    display_graph_if_enabled(
+        graph,
+        save_env="VIEW_GRAPH",
+        open_env="VIEW_GRAPH_OPEN",
+        default_save=True,
+        default_open=True,
+        xray=1,
+        images_dir_name="images",
+        output_name="agent6_graph_image.png",
+    )
+
+    #######################################################
+    messages = [
+        HumanMessage(
+            content="Add 3 and 4. Multiply the output by 2. Divide the output by 5"
+        )
+    ]
+
+    logger.info("Invoking model...")
+    messages = graph.invoke({"messages": messages})
+    logger.info("Model returned.")
+
+    for m in messages["messages"]:
+        m.pretty_print()
+
+    """## LangSmith
+
+    We can look at traces in LangSmith.
+    """
+
     print("Program Done.")
