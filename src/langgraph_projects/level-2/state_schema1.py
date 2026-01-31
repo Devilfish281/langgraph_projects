@@ -222,41 +222,43 @@ def display_graph_if_enabled(
             logger.exception("Saved graph PNG but failed to open viewer.")
 
 
-def make_state_type():
-    class CustomMessagesState(MessagesState):
+######################################################################
+### Custom State Example
+# EXAMPLE USING :
+# CustomStateMessages = make_state_for_graph()
+# builder = StateGraph(CustomStateMessages)
+######################################################################
+def make_state_for_graph():
+    class CustomStateMessages(MessagesState):
         # Add any keys needed beyond messages, which is pre-built
         pass
 
-    return CustomMessagesState
+    return CustomStateMessages
 
 
-# CustomMessagesState = make_state_type()
-# builder = StateGraph(CustomMessagesState)
 #####################################################################
 ### END
 #####################################################################
 
-
-"""## Schema
-
+#####################################################################
+### Schema
+#####################################################################
+"""
+## Schema
 When we define a LangGraph `StateGraph`, we use a [state schema](https://docs.langchain.com/oss/python/langgraph/graph-api/#state).
-
 The state schema represents the structure and types of data that our graph will use.
-
 All nodes are expected to communicate with that schema.
-
 LangGraph offers flexibility in how you define your state schema, accommodating various Python [types](https://docs.python.org/3/library/stdtypes.html#type-objects) and validation approaches!
-
+"""
+#####################################################################
+### TypedDict
+#####################################################################
+"""
 ## TypedDict
-
 As we mentioned in Module 1, we can use the `TypedDict` class from python's `typing` module.
-
 It allows you to specify keys and their corresponding value types.
-
 But, note that these are type hints.
-
 They can be used by static type checkers (like [mypy](https://github.com/python/mypy)) or IDEs to catch potential type-related errors before the code is run.
-
 But they are not enforced at runtime!
 """
 
@@ -268,8 +270,8 @@ class TypedDictState(TypedDict):
     bar: str
 
 
-"""For more specific value constraints, you can use things like the `Literal` type hint.
-
+"""
+For more specific value constraints, you can use things like the `Literal` type hint.
 Here, `mood` can only be either "happy" or "sad".
 """
 
@@ -279,18 +281,21 @@ from typing import Literal
 class TypedDictState(TypedDict):
     name: str
     mood: Literal["happy", "sad"]
-    random_value: NotRequired[float]
 
 
 """
 We can use our defined state class (e.g., here `TypedDictState`) in LangGraph by simply passing it to `StateGraph`.
-
 And, we can think about each state key as just a "channel" in our graph.
-
 As discussed in Module 1, we overwrite the value of a specified key or "channel" in each node.
 """
 
 import random
+
+
+class TypedDictState(TypedDict):
+    name: str
+    mood: Literal["happy", "sad"]
+    random_value: NotRequired[float]
 
 
 def node_1(state):
@@ -300,12 +305,6 @@ def node_1(state):
         "name": state["name"] + " is ... ",
         "random_value": rv,
     }
-
-
-def node_1_new(state):
-    logger.info("---Node 1 new---")
-    rv = random.random()
-    return {"name": state.name + " is ... ", "random_value": rv}
 
 
 def node_2(state):
@@ -368,6 +367,14 @@ def build_app():
     return graph
 
 
+#####################################################################
+### Dataclass
+#####################################################################
+"""
+## Dataclass
+Python's [dataclasses](https://docs.python.org/3/library/dataclasses.html) provide [another way to define structured data](https://www.datacamp.com/tutorial/python-data-classes).
+Dataclasses offer a concise syntax for creating classes that are primarily used to store data.
+"""
 from dataclasses import dataclass, field
 
 
@@ -376,6 +383,22 @@ class DataclassState:
     name: str
     mood: Literal["happy", "sad"]
     random_value: float | None = None
+
+
+"""
+To access the keys of a `dataclass`, we just need to modify the subscripting used in `node_1`: 
+* We use `state.name` for the `dataclass` state rather than `state["name"]` for the `TypedDict` above
+You'll notice something a bit odd: in each node, we still return a dictionary to perform the state updates.
+This is possible because LangGraph stores each key of your state object separately.
+The object returned by the node only needs to have keys (attributes) that match those in the state!
+In this case, the `dataclass` has key `name` so we can update it by passing a dict from our node, just as we did when state was a `TypedDict`.
+"""
+
+
+def node_1_new(state):
+    logger.info("---Node 1 new---")
+    rv = random.random()
+    return {"name": state.name + " is ... ", "random_value": rv}
 
 
 def build_dataclasses_app():
@@ -399,6 +422,15 @@ def build_dataclasses_app():
     return graph
 
 
+#####################################################################
+### Pydantic
+#####################################################################
+"""
+## Pydantic
+As mentioned, `TypedDict` and `dataclasses` provide type hints but they don't enforce types at runtime. 
+This means you could potentially assign invalid values without raising an error!
+For example, we can set `mood` to `mad` even though our type hint specifies `mood: list[Literal["happy","sad"]]`.
+"""
 from pydantic import BaseModel, ValidationError, field_validator
 
 
@@ -414,6 +446,12 @@ class PydanticState(BaseModel):
         if value not in ["happy", "sad"]:
             raise ValueError("Each mood must be either 'happy' or 'sad'")
         return value
+
+
+# try:
+#     state = PydanticState(name="John Doe", mood="mad")
+# except ValidationError as e:
+#     logger.error("Validation Error:", e)
 
 
 def build_pydantic_state_app():
@@ -459,9 +497,11 @@ if __name__ == "__main__":
         output_name="simple_graph_image.png",
     )
     #######################################################
+    ## TypedDict
+    #######################################################
     """Because our state is a dict, we simply invoke the graph with a dict to set an initial value of the `name` key in our state."""
     logger.debug("Invoking model...")
-    final_state = graph.invoke({"name": "Lance"})
+    final_state = graph.invoke({"name": "Matthew"})
     logger.debug("Model returned.")
 
     logger.info(
@@ -470,45 +510,14 @@ if __name__ == "__main__":
         final_state.get("mood"),
         final_state.get("random_value"),
     )
-
-    """## Dataclass
-
-    Python's [dataclasses](https://docs.python.org/3/library/dataclasses.html) provide [another way to define structured data](https://www.datacamp.com/tutorial/python-data-classes).
-
-    Dataclasses offer a concise syntax for creating classes that are primarily used to store data.
-    """
-
-    # from dataclasses import dataclass, field
-
-    # # If you don’t even want callers to be able to provide it during initialization,
-    # @dataclass
-    # class DataclassState:
-    #     name: str
-    #     mood: Literal["happy", "sad"]
-    #     random_value: float = field(init=False)  # not accepted in __init__
-
-    """To access the keys of a `dataclass`, we just need to modify the subscripting used in `node_1`:
-
-    * We use `state.name` for the `dataclass` state rather than `state["name"]` for the `TypedDict` above
-
-    You'll notice something a bit odd: in each node, we still return a dictionary to perform the state updates.
-
-    This is possible because LangGraph stores each key of your state object separately.
-
-    The object returned by the node only needs to have keys (attributes) that match those in the state!
-
-    In this case, the `dataclass` has key `name` so we can update it by passing a dict from our node, just as we did when state was a `TypedDict`.
-
-    def node_1_new(state):
-        logger.info("---Node 1 new---")
-        state.random_value = random.random()
-        return {"name": state.name + " is ... "}
-    """
+    #######################################################
+    #  Dataclass
+    #######################################################
     graph = build_dataclasses_app()
     """We invoke with a `dataclass` to set the initial values of each key / channel in our state!"""
 
     logger.debug("Invoking model...")
-    final_state = graph.invoke(DataclassState(name="Lance", mood="sad"))
+    final_state = graph.invoke(DataclassState(name="Matthew", mood="happy"))
     logger.debug("Model returned.")
 
     logger.info(
@@ -517,23 +526,20 @@ if __name__ == "__main__":
         final_state.get("mood"),
         final_state.get("random_value"),
     )
-
+    #######################################################
+    #  Pydantic
+    #######################################################
     """
     ## Pydantic
-
     As mentioned, `TypedDict` and `dataclasses` provide type hints but they don't enforce types at runtime.
-
     This means you could potentially assign invalid values without raising an error!
-
     For example, we can set `mood` to `mad` even though our type hint specifies `mood: list[Literal["happy","sad"]]`.
     """
 
-    dataclass_instance = DataclassState(name="Lance", mood="mad")
+    dataclass_instance = DataclassState(name="Matthew", mood="mad")
 
     """[Pydantic](https://docs.pydantic.dev/latest/api/base_model/) is a data validation and settings management library using Python type annotations.
-
     It's particularly well-suited [for defining state schemas in LangGraph](https://docs.langchain.com/oss/python/langgraph/use-graph-api#use-pydantic-models-for-graph-state) due to its validation capabilities.
-
     Pydantic can perform validation to check whether data conforms to the specified types and constraints at runtime.
     """
 
@@ -560,13 +566,13 @@ if __name__ == "__main__":
         logger.error(
             "Validation details: %s", exc.errors()
         )  # Added Code (structured details)
-        state = PydanticState(name="John Doe", mood="sad")  # Added Code (fallback)
+        state = PydanticState(name="John Doe", mood="happy")  # Added Code (fallback)
 
     # Add
     graph = build_pydantic_state_app()
 
     logger.debug("Invoking model...")
-    final_state = graph.invoke(PydanticState(name="Lance", mood="sad"))
+    final_state = graph.invoke(PydanticState(name="Matthew", mood="happy"))
     logger.debug("Model returned.")
 
     logger.info(

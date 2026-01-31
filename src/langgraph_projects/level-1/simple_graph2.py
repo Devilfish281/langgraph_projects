@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # langgraph_projects/src/langgraph_projects/level-1/simple_graph2.py
-# rev: 2024-06-03 12:00:00 UTC
+# reviewed: 2024-06-19
 # import logging
 # import os
 # import threading
@@ -106,7 +106,7 @@ def init_runtime() -> None:
 
 
 # You can see pricing for various models [here](https://openai.com/api/pricing/).
-# We will default to `gpt-4o` because it offers a good balance of quality, price, and speed.
+# We will default to `gpt-4o` because it offers a good baMatthew of quality, price, and speed.
 
 # There are [a few standard parameters](https://docs.langchain.com/oss/python/langchain/models#parameters) that we can set with chat models.
 # Two of the most common are:
@@ -237,18 +237,14 @@ def display_graph_if_enabled(
     #####################################################################
     """
     ## State
-
     First, define the [State](https://docs.langchain.com/oss/python/langgraph/graph-api#state) of the graph.
-
     The State schema serves as the input schema for all Nodes and Edges in the graph.
-
     Let's use the `TypedDict` class from python's `typing` module as our schema, which provides type hints for the keys.
     """
 
 
+# FOR StateGraph
 # from typing_extensions import TypedDict
-
-
 class State(TypedDict):
     graph_state: str
     random_value: NotRequired[float]
@@ -257,13 +253,9 @@ class State(TypedDict):
 """## Nodes
 
 [Nodes](https://docs.langchain.com/oss/python/langgraph/graph-api/#nodes) are just python functions.
-
 The first positional argument is the state, as defined above.
-
 Because the state is a `TypedDict` with schema as defined above, each node can access the key, `graph_state`, with `state['graph_state']`.
-
 Each node returns a new value of the state key `graph_state`.
-  
 By default, the new value returned by each node [will override](https://docs.langchain.com/oss/python/langgraph/graph-api/#reducers) the prior state value.
 """
 
@@ -287,19 +279,16 @@ def node_3(state):
     return {"graph_state": state["graph_state"] + " sad!"}
 
 
-"""## Edges
+"""
+## Edges
 
 [Edges](https://docs.langchain.com/oss/python/langgraph/graph-api/#edges) connect the nodes.
-
 Normal Edges are used if you want to *always* go from, for example, `node_1` to `node_2`.
-
 [Conditional Edges](https://docs.langchain.com/oss/python/langgraph/graph-api/#conditional-edges) are used if you want to *optionally* route between nodes.
-
 Conditional edges are implemented as functions that return the next node to visit based on some logic.
 """
 
-
-from typing import Literal
+# from typing import Literal
 
 
 def decide_mood(state) -> Literal["node_2", "node_3"]:
@@ -326,19 +315,12 @@ def build_app():
     ## Graph Construction
 
     Now, we build the graph from our components defined above.
-
     The [StateGraph class](https://docs.langchain.com/oss/python/langgraph/graph-api/#stategraph) is the graph class that we can use.
-
     First, we initialize a StateGraph with the `State` class we defined above.
-
     Then, we add our nodes and edges.
-
     We use the  [`START` Node, a special node](https://docs.langchain.com/oss/python/langgraph/graph-api/#start-node) that sends user input to the graph, to indicate where to start our graph.
-
     The [`END` Node](https://docs.langchain.com/oss/python/langgraph/graph-api/#end-node) is a special node that represents a terminal node.
-
     Finally, we [compile our graph](https://docs.langchain.com/oss/python/langgraph/graph-api/#compiling-your-graph) to perform a few basic checks on the graph structure.
-
     We can visualize the graph as a [Mermaid diagram](https://github.com/mermaid-js/mermaid).
     """
 
@@ -385,63 +367,51 @@ if __name__ == "__main__":
     ## Graph Invocation
 
     The compiled graph implements the [runnable](https://reference.langchain.com/python/langchain_core/runnables/?h=runnables) protocol.
-
     This provides a standard way to execute LangChain components.
-
     `invoke` is one of the standard methods in this interface.
-
-    The input is a dictionary `{"graph_state": "Hi, this is lance."}`, which sets the initial value for our graph state dict.
-
+    The input is a dictionary `{"graph_state": "Hi, this is Matthew."}`, which sets the initial value for our graph state dict.
     When `invoke` is called, the graph starts execution from the `START` node.
-
     It progresses through the defined nodes (`node_1`, `node_2`, `node_3`) in order.
-
     The conditional edge will traverse from node `1` to node `2` or `3` using a 50/50 decision rule.
-
     Each node function receives the current state and returns a new value, which overrides the graph state.
-
     The execution continues until it reaches the `END` node.
     """
     logger.debug("Invoking model...")
-    final_state = graph.invoke({"graph_state": "Hi, this is Lance."})
+    final_state = graph.invoke({"graph_state": "Hi, this is Matthew."})
     logger.debug("Model returned.")
 
     """
-    `invoke` runs the entire graph synchronously.
-
+    invoke runs the entire graph synchronously.
     This waits for each step to complete before moving to the next.
-
     It returns the final state of the graph after all nodes have executed.
 
-    In this case, it returns the state after `node_3` has completed:
-
-    ```
-    {'graph_state': 'Hi, this is Lance. I am sad!'}
-    ```
+    {'graph_state': 'Hi, this is Matthew. I am sad!'}
     """
 
     logger.info(
-        "Final state: graph_state=%s | random_value=%s",
+        "final_state: graph_state=%s | random_value=%s",
         final_state.get("graph_state"),
         final_state.get("random_value"),
     )
 
     # try running multiple times to see different paths
     logger.debug("Invoking model...")
-    final_state = graph.invoke({"graph_state": "Hi, this is Lance."})
+    final_state = graph.invoke({"graph_state": "Hi, this is Matthew."})
     logger.debug("Model returned.")
+
     logger.info(
-        "Final state: graph_state=%s | random_value=%s",
+        "final_state: graph_state=%s | random_value=%s",
         final_state.get("graph_state"),
         final_state.get("random_value"),
     )
 
     # try running multiple times to see different paths
     logger.debug("Invoking model...")
-    final_state = graph.invoke({"graph_state": "Hi, this is Lance."})
+    final_state = graph.invoke({"graph_state": "Hi, this is Matthew."})
     logger.debug("Model returned.")
+
     logger.info(
-        "Final state: graph_state=%s | random_value=%s",
+        "final_state: graph_state=%s | random_value=%s",
         final_state.get("graph_state"),
         final_state.get("random_value"),
     )

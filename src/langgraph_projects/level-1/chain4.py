@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # langgraph_projects/src/langgraph_projects/level-1/chain4.py
-
+# rev: 2024-06-19
 
 # import threading
 # from pathlib import Path
@@ -24,8 +24,6 @@ Now, let's build up to a simple chain that combines 4 concepts.
 * Using [chat models](https://docs.langchain.com/oss/python/integrations/chat) in graph nodes
 * [Binding tools](https://docs.langchain.com/oss/python/langchain/models#tool-calling) to our chat model
 * [Executing tool calls](https://docs.langchain.com/oss/python/langchain/models#tool-execution-loop) in graph nodes
-
-
 """
 
 
@@ -242,16 +240,16 @@ def display_graph_if_enabled(
             logger.exception("Saved graph PNG but failed to open viewer.")
 
 
-def make_state_type():
-    class CustomMessagesState(MessagesState):
+def make_state_for_graph():
+    class CustomStateMessages(MessagesState):
         # Add any keys needed beyond messages, which is pre-built
         pass
 
-    return CustomMessagesState
+    return CustomStateMessages
 
 
-# CustomMessagesState = make_state_type()
-# builder = StateGraph(CustomMessagesState)
+# CustomStateMessages = make_state_for_graph()
+# builder = StateGraph(CustomStateMessages)
 #####################################################################
 ### END
 #####################################################################
@@ -275,17 +273,11 @@ def multiply(a: int, b: int) -> int:
 def test_messages():
     """
     ## Messages
-
     Chat models can use [messages](https://docs.langchain.com/oss/python/langchain/messages), which capture different roles within a conversation.
-
     LangChain supports various message types, including `HumanMessage`, `AIMessage`, `SystemMessage`, and `ToolMessage`.
-
     These represent a message from the user, from chat model, for the chat model to instruct behavior, and from a tool call.
-
     Let's create a list of messages.
-
     Each message can be supplied with a few things:
-
     * `content` - content of the message
     * `name` - optionally, a message author
     * `response_metadata` - optionally, a dict of metadata (e.g., often populated by model provider for `AIMessages`)
@@ -296,14 +288,14 @@ def test_messages():
             content=f"So you said you were researching ocean mammals?", name="Model"
         )
     ]
-    messages.append(HumanMessage(content=f"Yes, that's right.", name="Lance"))
+    messages.append(HumanMessage(content=f"Yes, that's right.", name="Matthew"))
     messages.append(
         AIMessage(content=f"Great, what would you like to learn about.", name="Model")
     )
     messages.append(
         HumanMessage(
             content=f"I want to learn about the best place to see Orcas in the US.",
-            name="Lance",
+            name="Matthew",
         )
     )
 
@@ -313,6 +305,7 @@ def test_messages():
     logger.info("Invoking model...")
     result = get_model().invoke(messages)
     logger.info("Model returned.")
+
     logger.info(f"Model invocation result: {result}")
     logger.info(
         f"Model invocation result metadata: {getattr(result, 'response_metadata', {})}"
@@ -332,25 +325,16 @@ def test_tool_calling():
 
     """
     ## Tools
-
     Tools are useful whenever you want a model to interact with external systems.
-
     External systems (e.g., APIs) often require a particular input schema or payload, rather than natural language.
-
     When we bind an API, for example, as a tool we given the model awareness of the required input schema.
-
     The model will choose to call a tool based upon the natural language input from the user.
-
     And, it will return an output that adheres to the tool's schema.
-
     [Many LLM providers support tool calling](https://docs.langchain.com/oss/python/integrations/chat) and
     [tool calling interface](https://blog.langchain.com/improving-core-tool-interfaces-and-docs-in-langchain/) in LangChain is simple.
 
     You can simply pass any Python `function` into `ChatModel.bind_tools(function)`.
-
-
     Let's showcase a simple example of tool calling!
-
     The `multiply` function is our tool.
     """
 
@@ -360,9 +344,7 @@ def test_tool_calling():
     llm_with_tools = get_model().bind_tools([multiply])
 
     """If we pass an input - e.g., `"What is 2 multiplied by 3"` - we see a tool call returned.
-
     The tool call has specific arguments that match the input schema of our function along with the name of the function to call.
-
     ```
     {'arguments': '{"a":2,"b":3}', 'name': 'multiply'}
     ```
@@ -370,7 +352,7 @@ def test_tool_calling():
 
     logger.info("Invoking tool-enabled model...")
     tool_call_msg = llm_with_tools.invoke(
-        [HumanMessage(content="What is 2 multiplied by 3", name="Lance")]
+        [HumanMessage(content="What is 2 multiplied by 3", name="Matthew")]
     )
     logger.info("Model returned.")
     logger.info(f"Model invocation result: {tool_call_msg}")
@@ -380,11 +362,8 @@ def test_tool_calling():
 def test_messages_list():
     """
     ## Using messages as state
-
     With these foundations in place, we can now use  [messages](https://docs.langchain.com/oss/python/langchain/overview#messages) in our graph state.
-
     Let's define our state, `MessagesState`, as a `TypedDict` with a single key: `messages`.
-
     `messages` is simply a list of messages, as we defined above (e.g., `HumanMessage`, etc).
     """
 
@@ -392,25 +371,15 @@ def test_messages_list():
         messages: list[AnyMessage]
 
     """## Reducers
-
     Now, we have a minor problem!
-
     As we discussed, each node will return a new value for our state key `messages`.
-
     But, this new value will overwrite the prior `messages` value!
-
     As our graph runs, we want to **append** messages to our `messages` state key.
-
     We can use [reducer functions](https://docs.langchain.com/oss/python/langgraph/graph-api#reducers) to address this.
-
     Reducers specify how state updates are performed.
-
     If no reducer function is specified, then it is assumed that updates to the key should *override it* as we saw before.
-
     But, to append messages, we can use the pre-built `add_messages` reducer.
-
     This ensures that any messages are appended to the existing list of messages.
-
     We simply need to annotate our `messages` key with the `add_messages` reducer function as metadata.
     """
 
@@ -418,13 +387,10 @@ def test_messages_list():
         messages: Annotated[list[AnyMessage], add_messages]
 
     """Since having a list of messages in graph state is so common, LangGraph has a pre-built  [`MessagesState`](https://docs.langchain.com/oss/python/langgraph/graph-api#messagesstate)!
-
     `MessagesState` is defined:
-
     * With a pre-build single `messages` key
     * This is a list of `AnyMessage` objects
     * It uses the `add_messages` reducer
-
     We'll usually use `MessagesState` because it is less verbose than defining a custom `TypedDict`, as shown above.
     """
 
@@ -438,7 +404,7 @@ def test_messages_list():
     initial_messages = [
         AIMessage(content="Hello! How can I assist you?", name="Model"),
         HumanMessage(
-            content="I'm looking for information on marine biology.", name="Lance"
+            content="I'm looking for information on marine biology.", name="Matthew"
         ),
     ]
 
@@ -461,46 +427,27 @@ def build_app():
     test_tool_calling()
     test_messages_list()
 
-    # ------------------------------------------------------------
-    # LangGraph tool execution loop (THIS is what actually RUNS multiply)
-    # ------------------------------------------------------------
+    from langgraph.graph import MessagesState
+
+    class MessagesState(MessagesState):
+        # Add any keys needed beyond messages, which is pre-built
+        pass
 
     llm_with_tools = get_model().bind_tools([multiply])
 
-    CustomMessagesState = make_state_type()
-    # builder = StateGraph(CustomMessagesState)
+    # Node
+    def tool_calling_llm(state: MessagesState):
+        return {"messages": [llm_with_tools.invoke(state["messages"])]}
 
-    # Node: call the tool-enabled model
-    def tool_calling_llm_node(CustomMessagesState: MessagesState):
-        return {"messages": [llm_with_tools.invoke(CustomMessagesState["messages"])]}
-
-    # tool execution node (this is what actually calls multiply)
-    tool_node = ToolNode([multiply])
-
-    #  router decides whether to execute tools or stop
-    # END is  "__end__"
-    def should_continue(
-        CustomMessagesState: MessagesState,
-    ) -> Literal["tool_node", "__end__"]:
-        last_message = CustomMessagesState["messages"][-1]
-        if getattr(last_message, "tool_calls", None):
-            return "tool_node"
-        return END
-
+    # ------------------------------------------------------------
+    # LangGraph tool execution loop (THIS dose not actually RUNS multiply)
+    # ------------------------------------------------------------
     # Build graph
     builder = StateGraph(MessagesState)
-    builder.add_node("tool_calling_llm", tool_calling_llm_node)  # (unchanged)
-    builder.add_node("tool_node", tool_node)
-
-    builder.add_edge(START, "tool_calling_llm")  # (unchanged)
-
-    #  conditional route to tool execution when the model requests it
-    builder.add_conditional_edges("tool_calling_llm", should_continue)
-
-    #  after running the tool, go back to the LLM (tool loop)
-    builder.add_edge("tool_node", "tool_calling_llm")
-
-    graph = builder.compile()  # (unchanged)
+    builder.add_node("tool_calling_llm", tool_calling_llm)
+    builder.add_edge(START, "tool_calling_llm")
+    builder.add_edge("tool_calling_llm", END)
+    graph = builder.compile()
 
     return graph
 

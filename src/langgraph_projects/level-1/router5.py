@@ -3,25 +3,14 @@
 """
 
 ## Goals
-
 We can think of this as a router, where the chat model routes between a direct response or a tool call based upon the user input.
-
 This is a simple example of an agent, where the LLM is directing the control flow either by calling a tool or just responding directly.
-
-![Screenshot 2024-08-21 at 9.24.09 AM.png](https://cdn.prod.website-files.com/65b8cd72835ceeacd4449a53/66dbac6543c3d4df239a4ed1_router1.png)
-
 Let's extend our graph to work with either output!
-
 For this, we can use two ideas:
-
 (1) Add a node that will call our tool.
-
 (2) Add a conditional edge that will look at the chat model output, and route to our tool calling node or simply end if no tool call is performed.
 """
-
-
 # %pip install --quiet -U langchain_openai langchain_core langgraph langgraph-prebuilt
-
 
 ###########################################################
 ## Supporting Code
@@ -234,19 +223,21 @@ def display_graph_if_enabled(
             logger.exception("Saved graph PNG but failed to open viewer.")
 
 
-def make_state_type():
-    class CustomMessagesState(MessagesState):
+def make_state_for_graph():
+    class CustomStateMessages(MessagesState):
         # Add any keys needed beyond messages, which is pre-built
         pass
 
-    return CustomMessagesState
+    return CustomStateMessages
 
 
-# CustomMessagesState = make_state_type()
-# builder = StateGraph(CustomMessagesState)
+# CustomStateMessages = make_state_for_graph()
+# builder = StateGraph(CustomStateMessages)
 #####################################################################
 ### END
 #####################################################################
+
+
 def multiply(a: int, b: int) -> int:
     """Multiply a and b.
 
@@ -276,14 +267,15 @@ def build_app():
     """
 
     # Node
-    def tool_calling_llm(state: MessagesState):
+    def tool_calling_llm_node(state: MessagesState):
         logger.debug("Invoking LLM with tool calling capabilities...")
         return {"messages": [llm_with_tools.invoke(state["messages"])]}
 
     # Build graph
     builder = StateGraph(MessagesState)
-    builder.add_node("tool_calling_llm", tool_calling_llm)
+    builder.add_node("tool_calling_llm", tool_calling_llm_node)
     builder.add_node("tools", ToolNode([multiply]))
+
     builder.add_edge(START, "tool_calling_llm")
     builder.add_conditional_edges(
         "tool_calling_llm",

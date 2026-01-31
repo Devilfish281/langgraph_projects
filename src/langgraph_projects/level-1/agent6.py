@@ -252,16 +252,16 @@ def display_graph_if_enabled(
             logger.exception("Saved graph PNG but failed to open viewer.")
 
 
-def make_state_type():
-    class CustomMessagesState(MessagesState):
+def make_state_for_graph():
+    class CustomStateMessages(MessagesState):
         # Add any keys needed beyond messages, which is pre-built
         pass
 
-    return CustomMessagesState
+    return CustomStateMessages
 
 
-# CustomMessagesState = make_state_type()
-# builder = StateGraph(CustomMessagesState)
+# CustomStateMessages = make_state_for_graph()
+# builder = StateGraph(CustomStateMessages)
 #####################################################################
 ### END
 #####################################################################
@@ -330,17 +330,12 @@ def build_app():
 
     """
     As before, we use `MessagesState` and define a `Tools` node with our list of tools.
-
     The `Assistant` node is just our model with bound tools.
-
     We create a graph with `Assistant` and `Tools` nodes.
-
     We add `tools_condition` edge, which routes to `End` or to `Tools` based on  whether the `Assistant` calls a tool.
-
+    
     Now, we add one new step:
-
     We connect the `Tools` node *back* to the `Assistant`, forming a loop.
-
     * After the `assistant` node executes, `tools_condition` checks if the model's output is a tool call.
     * If it is a tool call, the flow is directed to the `tools` node.
     * The `tools` node connects back to `assistant`.

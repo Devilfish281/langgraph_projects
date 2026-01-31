@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
 # langgraph_projects/src/langgraph_projects/level-1/agent_memory7.py
 """
-
 ## Goals
-
 Now, we're going extend our agent by introducing memory.
 """
-
-
 # %pip install --quiet -U langchain_openai langchain_core langgraph langgraph-prebuilt
-
 
 ###########################################################
 ## Supporting Code
@@ -226,16 +221,22 @@ def display_graph_if_enabled(
             logger.exception("Saved graph PNG but failed to open viewer.")
 
 
-def make_state_type():
-    class CustomMessagesState(MessagesState):
+"""
+Define a custom state type for the graph.
+Example:
+CustomStateMessages = make_state_for_graph()
+builder = StateGraph(CustomStateMessages)
+"""
+
+
+def make_state_for_graph():
+    class CustomStateMessages(MessagesState):
         # Add any keys needed beyond messages, which is pre-built
         pass
 
-    return CustomMessagesState
+    return CustomStateMessages
 
 
-# CustomMessagesState = make_state_type()
-# builder = StateGraph(CustomMessagesState)
 #####################################################################
 ### END
 #####################################################################
@@ -387,21 +388,18 @@ if __name__ == "__main__":
 
     """
     We don't retain memory of 7 from our initial chat!
-
     This is because [state is transient](https://github.com/langchain-ai/langgraph/discussions/352#discussioncomment-9291220) to a single graph execution.
-
     Of course, this limits our ability to have multi-turn conversations with interruptions. 
-
     We can use [persistence](https://docs.langchain.com/oss/python/langgraph/persistence) to address this! 
-
     LangGraph can use a checkpointer to automatically save the graph state after each step.
-
     This built-in persistence layer gives us memory, allowing LangGraph to pick up from the last state update. 
-
     One of the easiest checkpointers to use is the `MemorySaver`, an in-memory key-value store for Graph state.
-
     All we need to do is simply compile the graph with a checkpointer, and our graph has memory!
     """
+    #######################################################
+    # Using MemorySaver for in-memory graph state persistence
+    # Build a graph with memory checkpointer
+    #######################################################
     # from langgraph.checkpoint.memory import MemorySaver
     # 1. Build the graph with memory checkpointer
     memory = MemorySaver()
@@ -410,13 +408,11 @@ if __name__ == "__main__":
     """
     When we use memory, we need to specify a `thread_id`.
     This `thread_id` will store our collection of graph states.
-
     Here is a cartoon:
     * The checkpointer write the state at every step of the graph
     * These checkpoints are saved in a thread 
     * We can access that thread in the future using the `thread_id`
     """
-
     # Specify a thread
     config = {"configurable": {"thread_id": "1"}}
 
@@ -443,40 +439,5 @@ if __name__ == "__main__":
     logger.info("Model returned.")
     for m in messages["messages"]:
         m.pretty_print()
-
-    """
-    ## Studio
-
-   Studio can now be run locally and accessed through your browser. 
-   It is now called _LangSmith Studio_ instead of _LangGraph Studio_. 
-   Detailed setup instructions are available in the "README.md" file. 
-   You can find a description of Studio 
-   https://docs.langchain.com/langsmith/studio
-   and specific details for local deployment 
-   https://docs.langchain.com/langsmith/quick-start-studio#local-development-server 
-    To start the local development server, run the following command in your terminal:
-
-    ```
-    langgraph dev
-    ```
-
-    You should see the following output:
-    ```
-    - 🚀 API: http://127.0.0.1:2024
-    - 🎨 Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
-    - 📚 API Docs: http://127.0.0.1:2024/docs
-    ```
-
-    Open your browser and navigate to the **Studio UI** URL shown above.
-    Load the `agent` in Studio, which uses `level-1/studio/agent.py` set in `level-1/studio/langgraph.json`.
-    
-    """
-
-    """
-    ## LangSmith
-
-    We can look at traces in LangSmith.
-    https://smith.langchain.com/
-    """
 
     print("Program Done.")

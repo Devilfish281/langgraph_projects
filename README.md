@@ -42,3 +42,16 @@ When it starts, you’ll see URLs like:
 The “Studio UI” link is what you open to use LangSmith Studio with your local server.
 
 ---
+
+# Running LangSmith
+
+---
+
+    ## LangSmith
+
+    We can look at traces in LangSmith.
+    https://smith.langchain.com/
+
+---
+
+[1]: https://python.langchain.com/en/latest/ecosystem/langgraph/cli.html
