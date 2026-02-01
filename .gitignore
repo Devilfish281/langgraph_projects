@@ -14,6 +14,13 @@ src/langgraph_projects/level-3/images/
 src/langgraph_projects/level-4/images/
 src/langgraph_projects/level-5/images/
 
+# LangGraph local API runtime artifacts (checkpoints, ops, retry counters)
+src/langgraph_projects/level-1/.langgraph_api/
+src/langgraph_projects/level-2/.langgraph_api/
+src/langgraph_projects/level-3/.langgraph_api/
+src/langgraph_projects/level-4/.langgraph_api/
+src/langgraph_projects/level-5/.langgraph_api/
+
 # Distribution / packaging
 .Python
 build/
