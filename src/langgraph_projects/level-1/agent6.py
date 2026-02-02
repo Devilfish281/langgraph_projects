@@ -124,7 +124,7 @@ def init_runtime() -> None:
 
 
 # You can see pricing for various models [here](https://openai.com/api/pricing/).
-# We will default to `gpt-4o` because it offers a good balance of quality, price, and speed.
+# We will default to `gpt-5.1` because it offers a good balance of quality, price, and speed.
 
 # There are [a few standard parameters](https://docs.langchain.com/oss/python/langchain/models#parameters) that we can set with chat models.
 # Two of the most common are:
@@ -143,7 +143,7 @@ def get_model() -> ChatOpenAI:
     and to avoid import-time side effects.
 
     Uses:
-        - ``OPENAI_MODEL`` (defaults to ``gpt-4o``)
+        - ``OPENAI_MODEL`` (defaults to ``gpt-5.1``)
 
     :returns: A configured :class:`langchain_openai.ChatOpenAI` instance.
     :rtype: langchain_openai.ChatOpenAI
@@ -156,7 +156,7 @@ def get_model() -> ChatOpenAI:
             if _MODEL is None:
                 _MODEL = ChatOpenAI(
                     temperature=0,
-                    model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+                    model=os.getenv("OPENAI_MODEL", "gpt-5.1"),
                     streaming=True,
                 )
 
