@@ -731,7 +731,7 @@ def Messages_and_add_messages():
     # Now, let's remove some messages.
     #############################################
     logger.info("Now, let's remove some messages.")
-    # Isolate messages to delete
+    # Remove all but last two messages
     delete_messages = [RemoveMessage(id=m.id) for m in messages[:-2]]
     logger.info("Delete messages " + str(delete_messages))
 

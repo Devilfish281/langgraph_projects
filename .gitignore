@@ -21,6 +21,14 @@ src/langgraph_projects/level-3/.langgraph_api/
 src/langgraph_projects/level-4/.langgraph_api/
 src/langgraph_projects/level-5/.langgraph_api/
 
+#DataBase files
+src/langgraph_projects/level-1/state_db/
+src/langgraph_projects/level-2/state_db/
+src/langgraph_projects/level-3/state_db/
+src/langgraph_projects/level-4/state_db/
+src/langgraph_projects/level-5/state_db/
+
+
 # Distribution / packaging
 .Python
 build/
