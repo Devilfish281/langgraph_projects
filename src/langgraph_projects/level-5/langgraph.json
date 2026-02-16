@@ -1,0 +1,10 @@
+{
+  "dockerfile_lines": [],
+  "graphs": {
+    "memory_graph": "./memory_store2.py:memory_graph_remote",
+    "agent_graph": "./memory_agent5.py:memory_graph_remote"
+  },
+  "env": "../../../.env",
+  "python_version": "3.12",
+  "dependencies": ["."]
+}

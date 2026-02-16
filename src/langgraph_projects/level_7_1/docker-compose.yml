@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: ../../..
+      dockerfile: src/langgraph_projects/level_7_1/Dockerfile
+    networks:
+      - lg-shared
+    environment:
+      DB_URI: postgresql://postgres:postgres@lg-postgres:5432/langgraph?sslmode=disable
+    ports:
+      - "8000:8000"
+    command:
+      ["uvicorn", "langgraph_projects.level_7_1.api:app", "--host", "0.0.0.0", "--port", "8000"]
+
+networks:
+  lg-shared:
+    external: true

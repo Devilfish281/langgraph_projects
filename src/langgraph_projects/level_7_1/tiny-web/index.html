@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LangGraph Chat Test</title>
+    <!--  magick -background transparent "favicon.png" -define icon:auto-resize=16,24,32,48,64,128,256 "favicon.ico" -->
+    <link rel="icon" href="favicon.ico" type="image/x-icon" />
+    <style>
+      body {
+        font-family: system-ui, Arial, sans-serif;
+        max-width: 820px;
+        margin: 40px auto;
+        padding: 0 16px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        margin: 10px 0;
+      }
+      input,
+      textarea,
+      button {
+        font-size: 16px;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 10px;
+      }
+      button {
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+      #out {
+        white-space: pre-wrap;
+        background: #f6f6f6;
+        padding: 12px;
+        border-radius: 8px;
+      }
+      .small {
+        color: #555;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Browser → API → Postgres Test</h1>
+    <p class="small">API URL: <code>http://localhost:8000/chat</code></p>
+
+    <div class="row">
+      <input id="thread" value="demo-1" />
+      <button id="send">Send</button>
+    </div>
+
+    <textarea id="msg" rows="4">Hi this is Matthew</textarea>
+
+    <h3>Response</h3>
+    <div id="out">(nothing yet)</div>
+
+    <script>
+      const apiUrl = "http://localhost:8000/chat";
+
+      async function sendChat() {
+        const thread_id = document.getElementById("thread").value.trim();
+        const message = document.getElementById("msg").value;
+
+        document.getElementById("out").textContent = "Sending...";
+
+        try {
+          // This is the normal browser way to POST JSON: method, headers, JSON.stringify(body). :contentReference[oaicite:1]{index=1}
+          const res = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ thread_id, message }),
+          });
+
+          const text = await res.text();
+          if (!res.ok) {
+            document.getElementById("out").textContent =
+              `HTTP ${res.status}\n\n${text}`;
+            return;
+          }
+
+          const data = JSON.parse(text);
+          document.getElementById("out").textContent =
+            `reply: ${data.reply}\n\nmessages:\n- ` +
+            data.messages.join("\n- ");
+        } catch (err) {
+          document.getElementById("out").textContent = "ERROR: " + err;
+        }
+      }
+
+      document.getElementById("send").addEventListener("click", sendChat);
+    </script>
+  </body>
+</html>

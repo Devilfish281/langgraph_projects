@@ -1,0 +1,9 @@
+python-dotenv,
+langgraph,
+langchain-openai,
+langchain-tavily,
+langchain-core,
+langsmith,
+wikipedia,
+pillow,
+trustcall
