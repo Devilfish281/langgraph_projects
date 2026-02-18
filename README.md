@@ -1,3 +1,7 @@
+# setup the environment
+
+& ((poetry env info --path) + "\Scripts\Activate.ps1")
+
 # Running LangGraph Studio Locally with Poetry
 
 ### 1) Install the LangGraph CLI (this is the part that adds the `langgraph` command)

@@ -1,4 +1,4 @@
-# src/langgraph_projects/level_7_2/memory_agent5_d.py
+# src/langgraph_projects/level_7_3/memory_agent5_d.py
 """
 Now, we're going to pull together the pieces we've learned to build an agent with long-term memory.
 Our agent, `task_life_goals`, will help us manage a ToDo list!
@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import (
     Annotated,
     Any,
+    Callable,
     Dict,
     List,
     Literal,
@@ -41,7 +42,6 @@ from typing import (
     Union,
 )
 from unittest import result
-from xml.parsers.expat import model
 
 from langchain_community.document_loaders import WikipediaLoader
 from langchain_core.messages import (
@@ -75,6 +75,9 @@ from langgraph_projects.my_utils.configuration import configuration
 from langgraph_projects.my_utils.load_env import load_dotenv_only, validate_environment
 from langgraph_projects.my_utils.logger_setup import setup_logger
 
+# from xml.parsers.expat import model
+
+
 # from PIL import Image
 
 
@@ -99,6 +102,9 @@ _PG_LOCK = threading.Lock()  # Added Code
 
 
 LANGCHAIN_PROJECT_NAME = "BreakpointsProject"
+
+# Separate collections (work vs personal) live under different namespaces. # added Line
+DEFAULT_TODO_KIND: Literal["personal", "work"] = "personal"  # added Line
 
 
 #####################################################################
@@ -472,6 +478,14 @@ def init_postgres():
         return _PG_CHECKPOINTER, _PG_STORE
 
 
+def _todo_namespace(user_id: str, todo_kind: str) -> tuple:  # added Line
+    return ("todo", todo_kind, user_id)  # added Line
+
+
+def _instructions_namespace(user_id: str, todo_kind: str) -> tuple:  # added Line
+    return ("instructions", todo_kind, user_id)  # added Line
+
+
 #####################################################################
 ### END
 #####################################################################
@@ -680,6 +694,11 @@ MODEL_SYSTEM_MESSAGE = """You are a helpful chatbot.
 
 You are designed to be a companion to a user, helping them keep track of their ToDo list.
 
+
+IMPORTANT: You are currently managing the "{todo_kind}" ToDo list.
+All tasks you add/update belong to this list implicitly.
+DO NOT write "(PERSONAL)" or "(WORK)" or otherwise label the task text with the list name.
+
 You have a long term memory which keeps track of three things:
 1. The user's profile (general information about them)
 2. The user's ToDo list
@@ -744,49 +763,57 @@ Your current instructions are:
 #######################################################
 # Node definitions
 #######################################################
-def task_life_goals_node(
-    state: MessagesState, config: RunnableConfig, store: BaseStore
-):
-    """Load memories from the store and use them to personalize the chatbot's response."""
+def make_task_life_goals_node(
+    todo_kind: str,
+) -> Callable[[MessagesState, RunnableConfig, BaseStore], Dict[str, Any]]:  # added Line
+    def task_life_goals_node(  # added Line
+        state: MessagesState, config: RunnableConfig, store: BaseStore  # added Line
+    ):  # added Line
+        """Load memories from the store and use them to personalize the chatbot's response."""
 
-    # Get the user ID from the config
-    # user_id = config["configurable"]["user_id"]
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
+        # Get the user ID from the config
+        # user_id = config["configurable"]["user_id"]
+        configurable = configuration.Configuration.from_runnable_config(config)
+        user_id = configurable.user_id
 
-    # Retrieve profile memory from the store
-    namespace = ("profile", user_id)
-    memories = store.search(namespace)
-    if memories:
-        user_profile = memories[0].value
-    else:
-        user_profile = None
+        # Retrieve profile memory from the store
+        namespace = ("profile", user_id)
+        memories = store.search(namespace)
+        if memories:
+            user_profile = memories[0].value
+        else:
+            user_profile = None
 
-    # Retrieve task memory from the store
-    namespace = ("todo", user_id)
-    memories = store.search(namespace)
-    todo = "\n".join(f"{mem.value}" for mem in memories)
+        # Retrieve task memory from the store
+        namespace = _todo_namespace(user_id, todo_kind)  # change Line
+        memories = store.search(namespace)
+        todo = "\n".join(f"{mem.value}" for mem in memories)
 
-    # Retrieve custom instructions
-    namespace = ("instructions", user_id)
-    memories = store.search(namespace)
-    if memories:
-        instructions = memories[0].value
-    else:
-        instructions = ""
+        # Retrieve custom instructions
+        namespace = _instructions_namespace(user_id, todo_kind)  # change Line
+        memories = store.search(namespace)
+        if memories:
+            instructions = memories[0].value
+        else:
+            instructions = ""
 
-    system_msg = MODEL_SYSTEM_MESSAGE.format(
-        user_profile=user_profile, todo=todo, instructions=instructions
-    )
+        system_msg = MODEL_SYSTEM_MESSAGE.format(
+            user_profile=user_profile,
+            todo=todo,
+            instructions=instructions,
+            todo_kind=todo_kind,
+        )
 
-    # Respond using memory as well as the chat history
-    response = (
-        get_model()
-        .bind_tools([UpdateMemory], parallel_tool_calls=False)
-        .invoke([SystemMessage(content=system_msg)] + state["messages"])
-    )
+        # Respond using memory as well as the chat history
+        response = (
+            get_model()
+            .bind_tools([UpdateMemory], parallel_tool_calls=False)
+            .invoke([SystemMessage(content=system_msg)] + state["messages"])
+        )
 
-    return {"messages": [response]}
+        return {"messages": [response]}
+
+    return task_life_goals_node  # added Line
 
 
 def update_profile_node(state: MessagesState, config: RunnableConfig, store: BaseStore):
@@ -857,147 +884,169 @@ def update_profile_node(state: MessagesState, config: RunnableConfig, store: Bas
     }
 
 
-def update_todos_node(state: MessagesState, config: RunnableConfig, store: BaseStore):
-    """Reflect on the chat history and update the memory collection."""
-    """
-    simple examplation:
-        Load old ToDos from memory store
-        Ask Trustcall: “Given the recent chat, update these ToDos or add new ones”
-        Save the updated ToDos back into memory store
-        Return a tool-result message so the chatbot can continue    
-    """
-    # Get the user ID from the config
-    # user_id = config["configurable"]["user_id"]
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
+def make_update_todos_node(
+    todo_kind: str,
+) -> Callable[[MessagesState, RunnableConfig, BaseStore], Dict[str, Any]]:  # added Line
+    def update_todos_node(  # added Line
+        state: MessagesState, config: RunnableConfig, store: BaseStore  # added Line
+    ):  # added Line
+        """Reflect on the chat history and update the memory collection."""
+        """
+        simple examplation:
+            Load old ToDos from memory store
+            Ask Trustcall: “Given the recent chat, update these ToDos or add new ones”
+            Save the updated ToDos back into memory store
+            Return a tool-result message so the chatbot can continue    
+        """
+        # Get the user ID from the config
+        # user_id = config["configurable"]["user_id"]
+        configurable = configuration.Configuration.from_runnable_config(config)
+        user_id = configurable.user_id
 
-    # Define the namespace for the memories
-    namespace = ("todo", user_id)
+        # Define the namespace for the memories
+        namespace = _todo_namespace(user_id, todo_kind)  # change Line
 
-    # Retrieve the most recent memories for context
-    existing_items = store.search(namespace)
+        # Retrieve the most recent memories for context
+        existing_items = store.search(namespace)
 
-    # Format the existing memories for the Trustcall extractor
-    tool_name = "ToDo"
-    existing_memories = (
-        [
-            (existing_item.key, tool_name, existing_item.value)
-            for existing_item in existing_items
-        ]
-        if existing_items
-        else None
-    )
-
-    # Merge the chat history and the instruction
-    TRUSTCALL_INSTRUCTION_FORMATTED = TRUSTCALL_INSTRUCTION.format(
-        time=datetime.now().isoformat()
-    )
-    updated_messages = list(
-        merge_message_runs(
-            messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)]
-            + state["messages"][:-1]
-        )
-    )
-
-    # Initialize the spy for visibility into the tool calls made by Trustcall
-    spy = Spy()
-
-    # Create the Trustcall extractor for updating the ToDo list
-    todo_extractor = create_extractor(
-        get_model(), tools=[ToDo], tool_choice=tool_name, enable_inserts=True
-    ).with_listeners(on_end=spy)
-
-    # Invoke the extractor
-    result = todo_extractor.invoke(
-        {"messages": updated_messages, "existing": existing_memories}
-    )
-
-    # Save the memories from Trustcall to the store
-    for r, rmeta in zip(result["responses"], result["response_metadata"]):
-        store.put(
-            namespace,
-            rmeta.get("json_doc_id", str(uuid.uuid4())),
-            r.model_dump(mode="json"),
+        # Format the existing memories for the Trustcall extractor
+        tool_name = "ToDo"
+        existing_memories = (
+            [
+                (existing_item.key, tool_name, existing_item.value)
+                for existing_item in existing_items
+            ]
+            if existing_items
+            else None
         )
 
-    # Respond to the tool call made in task_life_goals, confirming the update
-    tool_calls = state["messages"][-1].tool_calls
-
-    # Extract the changes made by Trustcall and add the the ToolMessage returned to task_life_goals
-    todo_update_msg = extract_tool_info(spy.called_tools, tool_name)
-    return {
-        "messages": [
-            {
-                "role": "tool",
-                "content": todo_update_msg,
-                "tool_call_id": tool_calls[0]["id"],
-            }
-        ]
-    }
-
-
-def update_instructions_node(
-    state: MessagesState, config: RunnableConfig, store: BaseStore
-):
-    """Reflect on the chat history and update the memory collection."""
-    """
-    Why you “lose” the old instructions (and why that's okay)
-    This node intentionally does overwrite behavior:
-        It reads old instructions (optional)
-        Generates new ones
-        Saves new ones under the same key "user_instructions"
-    So you don't keep versions unless you add versioning yourself (example: store under timestamps or incrementing keys).    
-    """
-    # Get the user ID from the config
-    # user_id = config["configurable"]["user_id"]
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
-
-    namespace = ("instructions", user_id)
-
-    existing_memory = store.get(namespace, "user_instructions")
-
-    # Format the memory in the system prompt
-    system_msg = CREATE_INSTRUCTIONS.format(
-        current_instructions=existing_memory.value if existing_memory else None
-    )
-    new_memory = get_model().invoke(
-        [SystemMessage(content=system_msg)]
-        + state["messages"][:-1]
-        + [
-            HumanMessage(
-                content="Please update the instructions based on the conversation"
+        # Merge the chat history and the instruction
+        TRUSTCALL_INSTRUCTION_FORMATTED = TRUSTCALL_INSTRUCTION.format(
+            time=datetime.now().isoformat()
+        )
+        updated_messages = list(
+            merge_message_runs(
+                messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)]
+                + state["messages"][:-1]
             )
-        ]
-    )
+        )
 
-    # Overwrite the existing memory in the store
-    key = "user_instructions"
-    store.put(namespace, key, {"memory": new_memory.content})
-    tool_calls = state["messages"][-1].tool_calls
-    # returns a ToolMessage-like payload back into the graph.
-    return {
-        "messages": [
-            {
-                "role": "tool",
-                "content": "updated instructions",
-                "tool_call_id": tool_calls[0]["id"],
-            }
-        ]
-    }
+        # Initialize the spy for visibility into the tool calls made by Trustcall
+        spy = Spy()
+
+        # Create the Trustcall extractor for updating the ToDo list
+        todo_extractor = create_extractor(
+            get_model(), tools=[ToDo], tool_choice=tool_name, enable_inserts=True
+        ).with_listeners(on_end=spy)
+
+        # Invoke the extractor
+        result = todo_extractor.invoke(
+            {"messages": updated_messages, "existing": existing_memories}
+        )
+
+        # Save the memories from Trustcall to the store
+        for r, rmeta in zip(result["responses"], result["response_metadata"]):
+            store.put(
+                namespace,
+                rmeta.get("json_doc_id", str(uuid.uuid4())),
+                r.model_dump(mode="json"),
+            )
+
+        # Respond to the tool call made in task_life_goals, confirming the update
+        tool_calls = state["messages"][-1].tool_calls
+
+        # Extract the changes made by Trustcall and add the the ToolMessage returned to task_life_goals
+        todo_update_msg = extract_tool_info(spy.called_tools, tool_name)
+        return {
+            "messages": [
+                {
+                    "role": "tool",
+                    "content": todo_update_msg,
+                    "tool_call_id": tool_calls[0]["id"],
+                }
+            ]
+        }
+
+    return update_todos_node  # added Line
+
+
+def make_update_instructions_node(
+    todo_kind: str,
+) -> Callable[[MessagesState, RunnableConfig, BaseStore], Dict[str, Any]]:  # added Line
+    def update_instructions_node(  # added Line
+        state: MessagesState, config: RunnableConfig, store: BaseStore  # added Line
+    ):  # added Line
+        """Reflect on the chat history and update the memory collection."""
+        """
+        Why you “lose” the old instructions (and why that's okay)
+        This node intentionally does overwrite behavior:
+            It reads old instructions (optional)
+            Generates new ones
+            Saves new ones under the same key "user_instructions"
+        So you don't keep versions unless you add versioning yourself (example: store under timestamps or incrementing keys).    
+        """
+        # Get the user ID from the config
+        # user_id = config["configurable"]["user_id"]
+        configurable = configuration.Configuration.from_runnable_config(config)
+        user_id = configurable.user_id
+
+        namespace = _instructions_namespace(user_id, todo_kind)  # change Line
+
+        existing_memory = store.get(namespace, "user_instructions")
+
+        existing_text = ""
+        if existing_memory and isinstance(existing_memory.value, dict):
+            existing_text = existing_memory.value.get("memory", "")
+        elif existing_memory:
+            existing_text = str(existing_memory.value)
+
+        # Format the memory in the system prompt
+        system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_text)
+
+        new_memory = get_model().invoke(
+            [SystemMessage(content=system_msg)]
+            + state["messages"][:-1]
+            + [
+                HumanMessage(
+                    content="Please update the instructions based on the conversation"
+                )
+            ]
+        )
+
+        # Overwrite the existing memory in the store
+        key = "user_instructions"
+        store.put(namespace, key, {"memory": new_memory.content})
+        tool_calls = state["messages"][-1].tool_calls
+        # returns a ToolMessage-like payload back into the graph.
+        return {
+            "messages": [
+                {
+                    "role": "tool",
+                    "content": "updated instructions",
+                    "tool_call_id": tool_calls[0]["id"],
+                }
+            ]
+        }
+
+    return update_instructions_node  # added Line
 
 
 #######################################################
 # Conditional edge
 #######################################################
 # Conditional edge
+type NextNode = Literal[
+    "__end__", "update_todos", "update_instructions", "update_profile"
+]
+
+
 def route_message(
     state: MessagesState, config: RunnableConfig, store: BaseStore
-) -> Literal[END, "update_todos", "update_instructions", "update_profile"]:
+) -> NextNode:
     """Reflect on the memories and chat history to decide whether to update the memory collection."""
     message = state["messages"][-1]
     if len(message.tool_calls) == 0:
-        return END
+        return "__end__"  # or: return END  (but "__end__" keeps the type checker happy)
     else:
         tool_call = message.tool_calls[0]
         if tool_call["args"]["update_type"] == "user":
@@ -1044,6 +1093,7 @@ def generate_memory_graph(
     use_checkpointer: bool = False,
     return_builder: bool = False,
     cross_thread: bool = False,
+    todo_kind: Literal["personal", "work"] = DEFAULT_TODO_KIND,  # added Line
 ) -> Union[StateGraph, object]:
 
     init_runtime()
@@ -1052,10 +1102,14 @@ def generate_memory_graph(
     # Define the graph
     # builder = StateGraph(MessagesState)
     builder = StateGraph(MessagesState, config_schema=configuration.Configuration)
-    builder.add_node("task_life_goals", task_life_goals_node)
-    builder.add_node("update_todos", update_todos_node)
+    builder.add_node(
+        "task_life_goals", make_task_life_goals_node(todo_kind)
+    )  # change Line
+    builder.add_node("update_todos", make_update_todos_node(todo_kind))  # change Line
     builder.add_node("update_profile", update_profile_node)
-    builder.add_node("update_instructions", update_instructions_node)
+    builder.add_node(
+        "update_instructions", make_update_instructions_node(todo_kind)
+    )  # change Line
 
     builder.add_edge(START, "task_life_goals")
     builder.add_conditional_edges("task_life_goals", route_message)
@@ -1067,12 +1121,12 @@ def generate_memory_graph(
     if return_builder:
         return builder
 
-    use_postgres = env_bool("USE_POSTGRES", default=False)  # Added Code
+    use_postgres = env_bool("USE_POSTGRES", default=False)
 
-    if use_postgres:  # Added Code
-        checkpointer, store = init_postgres()  # Added Code
-        # In Docker/prod you almost always want BOTH.  # Added Code
-        graph = builder.compile(checkpointer=checkpointer, store=store)  # Added Code
+    if use_postgres:
+        checkpointer, store = init_postgres()
+        # In Docker/prod you almost always want BOTH.
+        graph = builder.compile(checkpointer=checkpointer, store=store)
         return graph
 
     if cross_thread:
@@ -1101,19 +1155,44 @@ def generate_memory_graph(
 
 # analysts graph
 # When using Docker set USE_POSTGRES=true in the container environment.
-def get_memory_graph_remote():
-    return generate_memory_graph(
-        use_checkpointer=False, return_builder=False, cross_thread=False
-    )
+def get_memory_graph_remote_personal():  # added Line
+    return generate_memory_graph(  # added Line
+        use_checkpointer=False,
+        return_builder=False,
+        cross_thread=False,
+        todo_kind="personal",  # added Line
+    )  # added Line
 
 
-def get_builder():
-    return generate_memory_graph(
-        use_checkpointer=False, return_builder=True, cross_thread=False
-    )
+def get_memory_graph_remote_work():  # added Line
+    return generate_memory_graph(  # added Line
+        use_checkpointer=False,
+        return_builder=False,
+        cross_thread=False,
+        todo_kind="work",  # added Line
+    )  # added Line
 
 
-memory_graph_remote = get_memory_graph_remote()
+def get_builder_personal():  # added Line
+    return generate_memory_graph(  # added Line
+        use_checkpointer=False,
+        return_builder=True,
+        cross_thread=False,
+        todo_kind="personal",  # added Line
+    )  # added Line
+
+
+def get_builder_work():  # added Line
+    return generate_memory_graph(  # added Line
+        use_checkpointer=False,
+        return_builder=True,
+        cross_thread=False,
+        todo_kind="work",  # added Line
+    )  # added Line
+
+
+memory_graph_remote = get_memory_graph_remote_personal()  # change Line
+memory_graph_remote_work = get_memory_graph_remote_work()  # added Line
 memory_graph = None
 """langsmith STUDIO Raw Mode
 Set user_id to "Matthew" 
@@ -1154,23 +1233,19 @@ Set user_id to "Matthew"
 #######################################################
 # Test function to call the memory_graph and see the memory updates in action
 #######################################################
-def test_call_mAIstro_model(across_thread_memory=None):
+def test_call_Life_goals_model(across_thread_memory=None):
 
     # logger.info("PatchDoc args: %s", call.get("args", {}))
 
-    logger.info(" starting test_call_mAIstro_model.")
-    # We supply a thread ID for short-term (within-thread) memory
-    # We supply a user ID for long-term (across-thread) memory
+    logger.info(" starting test_call_Life_goals_model.")
     config = {"configurable": {"thread_id": "1", "user_id": "Matthew"}}
 
-    # User input to create a profile memory
     input_messages = [
         HumanMessage(
             content="My name is Matthew. I live in SF with my wife. I have a 1 year old daughter."
         )
     ]
 
-    # Run the graph
     logger.info("Running the graph with input to create a profile memory.")
     for chunk in memory_graph.stream(
         {"messages": input_messages}, config, stream_mode="values"
@@ -1178,12 +1253,10 @@ def test_call_mAIstro_model(across_thread_memory=None):
         chunk["messages"][-1].pretty_print()
     print("\n" + "---" * 25)
 
-    # User input for a ToDo
     input_messages = [
         HumanMessage(content="My wife asked me to book swim lessons for the baby.")
     ]
 
-    # Run the graph
     logger.info("Running the graph with input for a ToDo.")
     for chunk in memory_graph.stream(
         {"messages": input_messages}, config, stream_mode="values"
@@ -1191,14 +1264,12 @@ def test_call_mAIstro_model(across_thread_memory=None):
         chunk["messages"][-1].pretty_print()
     print("\n" + "---" * 25)
 
-    # User input to update instructions for creating ToDos
     input_messages = [
         HumanMessage(
             content="When creating or updating ToDo items, include specific local businesses / vendors."
         )
     ]
 
-    # Run the graph
     logger.info(
         "Running the graph with input to update instructions for creating ToDos."
     )
@@ -1208,22 +1279,24 @@ def test_call_mAIstro_model(across_thread_memory=None):
         chunk["messages"][-1].pretty_print()
     print("\n" + "---" * 25)
 
-    # Check for updated instructions
     user_id = "Matthew"
+    todo_kind = DEFAULT_TODO_KIND  # uses your default ("personal") unless you change it
 
-    # Search
+    # Search (instructions now: ("instructions", todo_kind, user_id))
     print("\n" + "---" * 25)
-    logger.info("Searching across-thread memory for instructions for user_id Matthew.")
-    for memory in across_thread_memory.search(("instructions", user_id)):
+    logger.info(
+        "Searching across-thread memory for instructions for user_id=%s todo_kind=%s.",
+        user_id,
+        todo_kind,
+    )
+    for memory in across_thread_memory.search(("instructions", todo_kind, user_id)):
         print(memory.value)
     print("\n" + "---" * 25)
 
-    # User input for a ToDo
     input_messages = [
         HumanMessage(content="I need to fix the jammed electric Yale lock on the door.")
     ]
 
-    # Run the graph
     logger.info("Running the graph with input for a ToDo.")
     for chunk in memory_graph.stream(
         {"messages": input_messages}, config, stream_mode="values"
@@ -1231,24 +1304,24 @@ def test_call_mAIstro_model(across_thread_memory=None):
         chunk["messages"][-1].pretty_print()
     print("\n" + "---" * 25)
 
-    # Namespace for the memory to save
+    # Search (todos now: ("todo", todo_kind, user_id))
     user_id = "Matthew"
-
-    # Search
     print("\n" + "---" * 25)
-    logger.info("Searching across-thread memory for ToDos for user_id Matthew.")
-    for memory in across_thread_memory.search(("todo", user_id)):
+    logger.info(
+        "Searching across-thread memory for ToDos for user_id=%s todo_kind=%s.",
+        user_id,
+        todo_kind,
+    )
+    for memory in across_thread_memory.search(("todo", todo_kind, user_id)):
         print(memory.value)
     print("\n" + "---" * 25)
 
-    # User input to update an existing ToDo
     input_messages = [
         HumanMessage(
             content="For the swim lessons, I need to get that done by end of November."
         )
     ]
 
-    # Run the graph
     logger.info("Running the graph with input to update an existing ToDo.")
     for chunk in memory_graph.stream(
         {"messages": input_messages}, config, stream_mode="values"
@@ -1256,16 +1329,10 @@ def test_call_mAIstro_model(across_thread_memory=None):
         chunk["messages"][-1].pretty_print()
     print("\n" + "---" * 25)
 
-    """We can see that Trustcall performs patching of the existing memory:
-    https://smith.langchain.com/public/4ad3a8af-3b1e-493d-b163-3111aa3d575a/r
-    """
-
-    # User input for a ToDo
     input_messages = [
         HumanMessage(content="Need to call back City Toyota to schedule car service.")
     ]
 
-    # Run the graph
     logger.info("Running the graph with input for a ToDo.")
     for chunk in memory_graph.stream(
         {"messages": input_messages}, config, stream_mode="values"
@@ -1273,33 +1340,24 @@ def test_call_mAIstro_model(across_thread_memory=None):
         chunk["messages"][-1].pretty_print()
     print("\n" + "---" * 25)
 
-    # Namespace for the memory to save
+    # Search ToDos again (namespaced)
     user_id = "Matthew"
-
-    # Search
     print("\n" + "---" * 25)
-    logger.info("Searching across-thread memory for ToDos for user_id Matthew.")
-    for memory in across_thread_memory.search(("todo", user_id)):
+    logger.info(
+        "Searching across-thread memory for ToDos for user_id=%s todo_kind=%s.",
+        user_id,
+        todo_kind,
+    )
+    for memory in across_thread_memory.search(("todo", todo_kind, user_id)):
         print(memory.value)
     print("\n" + "---" * 25)
 
-    """Now we can create a new thread.
-
-    This creates a new session.
-
-    Profile, ToDos, and Instructions saved to long-term memory are accessed.
-    """
-
-    # We supply a thread ID for short-term (within-thread) memory
-    # We supply a user ID for long-term (across-thread) memory
     config = {"configurable": {"thread_id": "2", "user_id": "Matthew"}}
 
-    # Chat with the chatbot
     input_messages = [
         HumanMessage(content="I have 30 minutes, what tasks can I get done?")
     ]
 
-    # Run the graph
     logger.info(
         "Running the graph with input to chat with the chatbot in a new thread."
     )
@@ -1309,12 +1367,10 @@ def test_call_mAIstro_model(across_thread_memory=None):
         chunk["messages"][-1].pretty_print()
     print("\n" + "---" * 25)
 
-    # Chat with the chatbot
     input_messages = [
         HumanMessage(content="Yes, give me some options to call for swim lessons.")
     ]
 
-    # Run the graph
     logger.info(
         "Running the graph with input to chat with the chatbot in a new thread."
     )
@@ -1323,15 +1379,6 @@ def test_call_mAIstro_model(across_thread_memory=None):
     ):
         chunk["messages"][-1].pretty_print()
     print("\n" + "---" * 25)
-
-    """Trace:
-
-    https://smith.langchain.com/public/84768705-be91-43e4-8a6f-f9d3cee93782/r
-
-    ## Studio
-
-    ![Screenshot 2024-11-04 at 1.00.19 PM.png](https://cdn.prod.website-files.com/65b8cd72835ceeacd4449a53/6732cfb05d9709862eba4e6c_Screenshot%202024-11-11%20at%207.46.40%E2%80%AFPM.png)
-    """
 
     logger.info("Test mAIstro mode completed successfully.")
 
@@ -1479,7 +1526,7 @@ async def run_langgraph_sdk_example():
 #######################################################
 # Only run demos when you execute the file directly (NOT when Studio imports it).
 if __name__ == "__main__":
-    use_postgres = env_bool("USE_POSTGRES", default=False)  # Added Code
+    use_postgres = env_bool("USE_POSTGRES", default=False)
     if use_postgres:
         logger.info(
             "USE_POSTGRES is set to True. The application will attempt to connect to a PostgreSQL database for memory storage."
@@ -1509,7 +1556,10 @@ if __name__ == "__main__":
 
         if test_call_mAIstro_flag:
             memory_graph, across_thread_memory = generate_memory_graph(
-                use_checkpointer=False, return_builder=False, cross_thread=True
+                use_checkpointer=False,
+                return_builder=False,
+                cross_thread=True,
+                todo_kind="personal",  # change Line
             )
             #######################################################
             ## Display the graph for Analysts
@@ -1524,7 +1574,7 @@ if __name__ == "__main__":
                 images_dir_name="images",
                 output_name="call_mAIstro_graph.png",
             )
-            test_call_mAIstro_model(across_thread_memory)
+            test_call_Life_goals_model(across_thread_memory)
     logger.info("All done.")
 
 

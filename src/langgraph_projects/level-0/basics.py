@@ -225,7 +225,7 @@ def build_app():
     init_langsmith()
 
     # Create a message
-    msg = HumanMessage(content="Hello world", name="Lance")
+    msg = HumanMessage(content="Hello world", name="Matthew")
 
     # Message list
     messages = [msg]

@@ -1,0 +1,21 @@
+services:
+  api:
+    build:
+      context: ../../..
+      dockerfile: src/langgraph_projects/level_7_4/Dockerfile
+    networks:
+      - lg-shared
+    env_file:
+      - .env
+    environment:
+      USE_POSTGRES: true
+      DB_URI: postgresql://postgres:postgres@lg-postgres:5432/langgraph?sslmode=disable
+      REDIS_URI: redis://redis:6379  # <- Added
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "langgraph_projects.level_7_4.api_memory_agent5_d:app", "--host", "0.0.0.0", "--port", "8000"]
+
+
+networks:
+  lg-shared:
+    external: true

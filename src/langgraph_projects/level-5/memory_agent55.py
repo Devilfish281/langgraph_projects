@@ -140,8 +140,8 @@ instruction = """Extract memories from the following conversation:"""
 
 # Conversation
 conversation = [
-    HumanMessage(content="Hi, I'm Lance."),
-    AIMessage(content="Nice to meet you, Lance."),
+    HumanMessage(content="Hi, I'm Matthew."),
+    AIMessage(content="Nice to meet you, Matthew."),
     HumanMessage(content="This morning I had a nice bike ride in San Francisco."),
 ]
 
@@ -673,12 +673,12 @@ display(Image(graph.get_graph(xray=1).draw_mermaid_png()))
 
 # We supply a thread ID for short-term (within-thread) memory
 # We supply a user ID for long-term (across-thread) memory
-config = {"configurable": {"thread_id": "1", "user_id": "Lance"}}
+config = {"configurable": {"thread_id": "1", "user_id": "Matthew"}}
 
 # User input to create a profile memory
 input_messages = [
     HumanMessage(
-        content="My name is Lance. I live in SF with my wife. I have a 1 year old daughter."
+        content="My name is Matthew. I live in SF with my wife. I have a 1 year old daughter."
     )
 ]
 
@@ -707,7 +707,7 @@ for chunk in graph.stream({"messages": input_messages}, config, stream_mode="val
     chunk["messages"][-1].pretty_print()
 
 # Check for updated instructions
-user_id = "Lance"
+user_id = "Matthew"
 
 # Search
 for memory in across_thread_memory.search(("instructions", user_id)):
@@ -723,7 +723,7 @@ for chunk in graph.stream({"messages": input_messages}, config, stream_mode="val
     chunk["messages"][-1].pretty_print()
 
 # Namespace for the memory to save
-user_id = "Lance"
+user_id = "Matthew"
 
 # Search
 for memory in across_thread_memory.search(("todo", user_id)):
@@ -755,7 +755,7 @@ for chunk in graph.stream({"messages": input_messages}, config, stream_mode="val
     chunk["messages"][-1].pretty_print()
 
 # Namespace for the memory to save
-user_id = "Lance"
+user_id = "Matthew"
 
 # Search
 for memory in across_thread_memory.search(("todo", user_id)):
@@ -770,7 +770,7 @@ Profile, ToDos, and Instructions saved to long-term memory are accessed.
 
 # We supply a thread ID for short-term (within-thread) memory
 # We supply a user ID for long-term (across-thread) memory
-config = {"configurable": {"thread_id": "2", "user_id": "Lance"}}
+config = {"configurable": {"thread_id": "2", "user_id": "Matthew"}}
 
 # Chat with the chatbot
 input_messages = [HumanMessage(content="I have 30 minutes, what tasks can I get done?")]

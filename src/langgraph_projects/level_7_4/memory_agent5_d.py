@@ -1,19 +1,21 @@
-# src/langgraph_projects/level_7_2/api_memory_agent5_d.py
+# src/langgraph_projects/level_7_4/api_memory_agent5_d.py
 import json
 import os
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.store.postgres import PostgresStore
 from pydantic import BaseModel
 
 # Import *functions*, not import-time graph instances
-from langgraph_projects.level_7_2.memory_agent5_d import (
-    get_builder,
+from langgraph_projects.level_7_4.memory_agent5_d import (
+    get_builder_personal,
+    get_builder_work,
     init_langsmith,
     init_runtime,
 )
@@ -44,7 +46,10 @@ async def lifespan(app: FastAPI):
     app.state.store = app.state.store_cm.__enter__()
     app.state.store.setup()
 
-    app.state.builder = get_builder()
+    app.state.builders = {  # added Line
+        "personal": get_builder_personal(),  # added Line
+        "work": get_builder_work(),  # added Line
+    }  # added Line
     # Compile graph once
     """
         # Store for long-term (across-thread) memory
@@ -56,10 +61,14 @@ async def lifespan(app: FastAPI):
             checkpointer=within_thread_memory, store=across_thread_memory
         )
     """
-    app.state.graph = app.state.builder.compile(
-        checkpointer=app.state.checkpointer,
-        store=app.state.store,
-    )
+    app.state.graphs = {  # added Line
+        kind: builder.compile(  # added Line
+            checkpointer=app.state.checkpointer,  # added Line
+            store=app.state.store,  # added Line
+        )  # added Line
+        for kind, builder in app.state.builders.items()  # added Line
+    }  # added Line
+
     # App is now "running"
     yield
 
@@ -87,7 +96,15 @@ app.add_middleware(
 class ChatIn(BaseModel):
     thread_id: str
     user_id: str
+    todo_kind: Literal["personal", "work"]  # added Line
     message: str
+
+
+def _pick_graph(todo_kind: str):  # added Line
+    graph = app.state.graphs.get(todo_kind)  # added Line
+    if graph is None:  # added Line
+        raise HTTPException(400, detail=f"Invalid todo_kind: {todo_kind}")  # added Line
+    return graph  # added Line
 
 
 @app.post("/chat")
@@ -96,13 +113,19 @@ def chat(payload: ChatIn):
         "configurable": {"thread_id": payload.thread_id, "user_id": payload.user_id}
     }
 
-    result = app.state.graph.invoke(
+    graph = _pick_graph(payload.todo_kind)
+
+    result = graph.invoke(
         {"messages": [{"role": "user", "content": payload.message}]},
         config=config,
     )
 
     last = result["messages"][-1].content
-    return {"reply": last}
+    return JSONResponse(  # Added Code
+        content={"reply": last, "todo_kind": payload.todo_kind},  # Added Code
+        media_type="application/json; charset=utf-8",  # Added Code
+    )  # Added Code
+    # return {"reply": last, "todo_kind": payload.todo_kind}
 
 
 @app.post("/stream")
@@ -111,9 +134,11 @@ def stream(payload: ChatIn):
         "configurable": {"thread_id": payload.thread_id, "user_id": payload.user_id}
     }
 
+    graph = _pick_graph(payload.todo_kind)
+
     def ndjson_generator():
         # stream_mode="values" emits the full state after each step :contentReference[oaicite:2]{index=2}
-        for chunk in app.state.graph.stream(
+        for chunk in graph.stream(
             {"messages": [{"role": "user", "content": payload.message}]},
             config=config,
             stream_mode="values",
@@ -125,13 +150,18 @@ def stream(payload: ChatIn):
             yield json.dumps(
                 {
                     "event": "chunk",
+                    "todo_kind": payload.todo_kind,
                     "role": getattr(msg, "type", None),  # e.g., "ai", "human", "tool"
                     "content": getattr(msg, "content", ""),
                 },
                 ensure_ascii=False,
             ) + "\n"
 
-    return StreamingResponse(ndjson_generator(), media_type="application/x-ndjson")
+    return StreamingResponse(
+        ndjson_generator(),
+        media_type="application/x-ndjson; charset=utf-8",
+    )
+    # return StreamingResponse(ndjson_generator(), media_type="application/x-ndjson")
 
 
 # @app.get("/todos/{user_id}")
@@ -146,36 +176,40 @@ def stream(payload: ChatIn):
 #     }
 
 
-@app.get("/todos/{user_id}")
-def get_todos(user_id: str):
-    items = app.state.store.search(("todo", user_id))
+@app.get("/todos/{todo_kind}/{user_id}")  # change Line
+def get_todos(todo_kind: Literal["personal", "work"], user_id: str):  # change Line
+    items = app.state.store.search(("todo", todo_kind, user_id))  # change Line
     return {
+        "todo_kind": todo_kind,  # added Line
         "count": len(items),
         "todos": [{"key": it.key, "value": jsonable_encoder(it.value)} for it in items],
     }
 
 
-@app.get("/instructions/{user_id}")
-def get_instructions(user_id: str):
-    namespace = ("instructions", user_id)
+@app.get("/instructions/{todo_kind}/{user_id}")  # change Line
+def get_instructions(  # change Line
+    todo_kind: Literal["personal", "work"], user_id: str  # change Line
+):
+    namespace = ("instructions", todo_kind, user_id)  # change Line
 
-    # Your writer uses this fixed key: store.put(namespace, "user_instructions", {...})
+    # writer uses: store.put(namespace, "user_instructions", {...})
     item = app.state.store.get(namespace, "user_instructions")
     if item:
         return {
+            "todo_kind": todo_kind,  # added Line
             "user_id": user_id,
             "key": item.key,
             "value": jsonable_encoder(item.value),
         }
 
-    # Fallback: if you ever stored instructions under different keys
     items = app.state.store.search(namespace)
     if not items:
         raise HTTPException(
-            status_code=404, detail="No instructions found for this user_id"
+            status_code=404, detail="No instructions found for this user_id/todo_kind"
         )
 
     return {
+        "todo_kind": todo_kind,  # added Line
         "user_id": user_id,
         "count": len(items),
         "instructions": [
@@ -188,14 +222,10 @@ def get_instructions(user_id: str):
 def get_profile(user_id: str):
     namespace = ("profile", user_id)
 
-    # Your profile writes can create multiple docs (uuid keys),
-    # so return the full list and also a "latest" convenience field.
     items = app.state.store.search(namespace)
-
     if not items:
         raise HTTPException(status_code=404, detail="No profile found for user_id")
 
-    # NOTE: ordering depends on store implementation; this is a convenience.
     latest = items[0]
 
     return {

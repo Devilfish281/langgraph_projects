@@ -6,7 +6,7 @@ authors = [
     {name = "Devilfish281",email = "Dobley@csu.fullerton.edu"}
 ]
 readme = "README.md"
-requires-python = ">=3.12,<4.0.0"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "python-dotenv (>=1.2.1,<2.0.0)",
     "langgraph (>=1.0.7,<2.0.0)",
@@ -21,7 +21,8 @@ dependencies = [
     "trustcall (>=0.0.39,<0.0.40)",
     "fastapi (>=0.129.0,<0.130.0)",
     "uvicorn (>=0.40.0,<0.41.0)",
-    "rich (>=14.3.2,<15.0.0)"
+    "rich (>=14.3.2,<15.0.0)",
+    "langgraph-checkpoint-redis (>=0.3.5,<0.4.0)"
 ]
 
 [tool.poetry]

@@ -698,7 +698,7 @@ def test_call_model(across_thread_memory):
     # User input
     input_messages = [
         HumanMessage(
-            content="Hi, my name is Lance and I like to bike around San Francisco and eat at bakeries."
+            content="Hi, my name is Matthew and I like to bike around San Francisco and eat at bakeries."
         )
     ]
 
